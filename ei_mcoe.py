@@ -5,17 +5,21 @@
 # ----------------------------------------------------------
 
 import pandas as pd
-# import sqlalchemy as sa
+import sqlalchemy as sa
 import pudl  # is it bad that this is imported here as well? (used for graphs)
 import matplotlib.pyplot as plt
 from scipy import stats
+import dask.dataframe as dd
+from dask.distributed import Client
+import os
 
 import logging
 logger = logging.getLogger(__name__)
 
-# pudl_settings = pudl.workspace.setup.get_defaults()
-# pudl_engine = sa.create_engine(pudl_settings["pudl_db"])
-# pudl_out = pudl.output.pudltabl.PudlTabl(pudl_engine, freq='AS',rolling=True)
+
+pudl_settings = pudl.workspace.setup.get_defaults()
+pudl_engine = sa.create_engine(pudl_settings["pudl_db"])
+pudl_out = pudl.output.pudltabl.PudlTabl(pudl_engine, freq='AS',rolling=True)
 
 # mcoe = pudl_out.mcoe()
 # ferc1_steam = pudl_out.plants_steam_ferc1()
@@ -44,13 +48,49 @@ eia_wa_col_dict = {
 
 fuel_types = ['coal', 'gas', 'oil', 'waste']
 
+data_sources = {'plant_id_pudl': 'pudl',
+                'unit_id_pudl': 'pudl',
+                'fuel_type_code_pudl': 'pudl',
+                'plant_id_eia': 'eia860',
+                'report_year': 'eia860',
+                'state': 'eia860',
+                'city': 'eia860',
+                'latitude': 'eia860',
+                'longitude': 'eia860',
+                'total_fuel_cost': 'eia923',
+                'net_generation_mwh': 'eia923',
+                'capacity_mw': 'eia923',
+                'so2_mass_lbs': 'CEMS',
+                'nox_mass_libs': 'CEMS',
+                'co2_mass_tons': 'CEMS',
+                'variable_om_mwh_ferc1': 'FERC Form 1',
+                'fixed_om_mwh_ferc1': 'FERC Form 1',
+                'count': '',
+                'sig_hr': '',
+                'mcoe': '',
+                'weighted_ave_generator_age_years': '',
+                'weighted_ave_heat_rate_mmbtu_mwh': ''}
+
 # ----------------------------------------------------------
 # -------------------- Fluid Functions ---------------------
 # ----------------------------------------------------------
 
 
 def date_to_year(df):
-    """Convert report_date to report_year for MCOE table."""
+    """Convert report_date to report_year for MCOE table.
+
+    This function exists to further synchonize FERC Form 1 and EIA data. FERC
+    Form 1 Data only has report year; having this column in common is essential
+    when merging the data from both sources.
+
+    Args:
+        df (pandas.DataFrame): A DataFrame containing raw mcoe data. Output of
+            pudl_out.mcoe().
+
+    Returns:
+        pandas.DataFrame: A DataFrame with a column indicating report year
+            rather than the full date.
+    """
     logger.info('beginning date conversion')
     df = (
         df.assign(report_year=lambda x: x.report_date.dt.year)
@@ -60,7 +100,22 @@ def date_to_year(df):
 
 
 def add_generator_age(df):
-    """Add column for generator age."""
+    """Add column for generator age.
+
+    This function calculates generator age by subtracting the year the
+    generator went into operation from the report year.
+
+    This is calculated here as opposed to in the eia860.py file because of how
+    the 'operating_date' is merged with the rest of the data. It seemed cleaner
+    to calculate the generator age here.
+
+    Args:
+        df (pandas.DataFrame): A DataFrame with the raw mcoe data and
+            report date already changed to report year -- date_to_year().
+
+    Returns:
+        pandas.DataFrame: A DataFrame with a new column for generator age.
+    """
     logger.info('calculating generator age')
     df = df.astype({'operating_date': 'datetime64[ns]'})
     df = df.assign(generator_age_years=(df.report_year -
@@ -70,11 +125,17 @@ def add_generator_age(df):
 
 
 def test_segment(df):
-    """Grab a DataFrame chunch pertaining to a single plant id."""
-    df = (
-        df.loc[df['plant_id_pudl'] == 32]
-          .sort_values('report_year', ascending=False)
-    )
+    """Grab a DataFrame chunk pertaining to a single plant id."""
+    if type(df.columns) == pd.core.indexes.base.Index:
+        df = (
+            df.loc[df['plant_id_pudl'] == 32]
+            .sort_values('report_year', ascending=False)
+        )
+    elif type(df.columns == pd.core.indexes.multi.MultiIndex):
+        df = (
+            df.loc[df[('pudl', 'plant_id_pudl')] == 32]
+            .sort_values(('eia860', 'report_year'), ascending=False)
+        )
     return df
 
 
@@ -87,6 +148,16 @@ def year_selector(df, start_year, end_year):
 
 def weighted_average(df, wa_col_dict, idx_cols):
     """Generate a weighted average for multiple columns at once.
+
+    When aggregating the data by plant and fuel type, many of the values can
+    be summed. Heat rates and generator age, however, are claculated with a
+    weighted average. This function exists because there is no python or numpy
+    function to calculate weighted average like there is for .sum() or .mean().
+
+    In this case, the heat rate calculation is based the 'weight' or share
+    of generator net generation (net_generation_mwh) and the generator age is
+    based on that of the generators' capacity (capacity_mw). As seen in the
+    global eia_wa_col_dict dictionary.
 
     Args:
         df (pandas.DataFrame): A DataFrame containing, at minimum, the columns
@@ -118,22 +189,20 @@ def weighted_average(df, wa_col_dict, idx_cols):
 def regroup_data(df, idx_cols, merge_cols=[], wa_col_dict=None, sum_cols=None):
     """Regroup data by plant or unit and run aggregation calculations.
 
+    This function serves to execute a number of unique groupings and mergers in
+    one place. The optional parameters lend it the flexibility to be used
+    across multiple parts of the project.
+
     Args:
         df (pandas.DataFrame): A DataFrame containing all relevent columns.
             Likely the pudl_out.mcoe() or equivalent.
         index_cols (list): List of columns to define the groupby.
         merge_cols (list): List of columns to re-incorporate into the final
             DataFrame.
-        wa_col_dict (dictionary): Dictionary with keys and values that
+        wa_col_dict (dict): Dictionary with keys and values that
             indicate the column names of 'data' and 'weight' values to be
             used in weighted average calculation.
         sum_cols (list): List of columns to be summed during groupby.
-        drop_calcs (bool): Boolean to indicate whether to drop calcuated
-            columns and just keep the merge_cols and index_cols in new
-            groupby form.
-        count_col (bool): Boolean to indicate whether to add a column to
-            count the number of items compiled per index value in a
-            groupby.
 
     Returns:
         pandas.DataFrame: A DataFrame containing data properly regrouped
@@ -166,9 +235,60 @@ def regroup_data(df, idx_cols, merge_cols=[], wa_col_dict=None, sum_cols=None):
 
 """
 Part 1 Functions are mostly neutral and applicable accross eia and ferc
-datasets. Their primary purpose is to use groupby and merge functions to
-reorient and grab subsets of data. Some of them are used in Part 2 as well.
+datasets therefore they're primarily located in the 'fluid functions' section.
+The part1_main() function pulls all of the information together and is the only
+function that needs to pull together the full output.
 """
+
+
+def add_source_cols(df):
+    """Create column multindex to specify data sources.
+
+    Args:
+        df (pandas.DataFrame): A finished dataframe in need of adding a
+            multiindex for sources.
+
+    Returns:
+        pandas.DataFrame: A DataFrame with a multindex that references the
+            source of each of the columns.
+    """
+    logger.info('adding source cols')
+    source_dict = {}
+    # Make a new dictionary with only sources of columns relevant to this table
+    for key, value in data_sources.items():
+        if key in df.columns.to_list():
+            source_dict.update({key: value})
+    # Swap columns and rows to map on sources
+    df = df.T.reset_index()
+    df['source'] = df['index'].map(source_dict)
+    # Switch columns back to rows
+    df = df.set_index(['source', 'index']).T
+    return df
+
+
+def part1_df_creator(df, level):
+    """Create final data output for Part 1.
+
+    Args:
+        df (pandas.DataFrame): Raw eia data with generator age and report_year
+            calculated.
+        level (str): A string (either 'plant' or 'unit') used to indicate
+            the output of the function.
+
+    Returns:
+        pandas.DataFrame: A DataFrame that either reflects the plant level
+            or unit level eia data separated by fuel type.
+    """
+    # Prep mcoe table data
+    if level == 'plant':
+        level = 'fuel'
+
+    level_df = regroup_data(df, input_dict[level+'_index_cols'],
+                            merge_cols=input_dict['merge_cols_qual'],
+                            wa_col_dict=eia_wa_col_dict,
+                            sum_cols=input_dict['eia_sum_cols'])
+    logger.info('Finished Part 1 '+level+' level compilation')
+    return level_df
 
 
 def part1_main(pudl_out, level, start_yr=None, end_yr=None, drop_calcs=False):
@@ -188,24 +308,15 @@ def part1_main(pudl_out, level, start_yr=None, end_yr=None, drop_calcs=False):
         pandas.DataFrame: A DataFrame that either reflects the plant level
             or unit level eia data separated by fuel type.
     """
-    # Prep mcoe table data
     df = add_generator_age(date_to_year(pudl_out.mcoe()))
-
-    if level == 'plant':
-        level = 'fuel'
-
-    level_df = regroup_data(df, input_dict[level+'_index_cols'],
-                            merge_cols=input_dict['merge_cols_qual'],
-                            wa_col_dict=eia_wa_col_dict,
-                            sum_cols=input_dict['eia_sum_cols'])
+    out_df = part1_df_creator(df, level)
     if drop_calcs is True:
-        level_df = level_df[input_dict[level+'_index_cols'] +
-                            input_dict['merge_cols_qual']]
+        out_df = out_df[input_dict[level+'_index_cols'] +
+                        input_dict['merge_cols_qual']]
     if start_yr is not None:
-        level_df = year_selector(level_df, start_yr, end_yr)
-
-    logger.info('Finished Part 1 '+level+' level compilation')
-    return level_df
+        out_df = year_selector(out_df, start_yr, end_yr)
+    out_df = add_source_cols(out_df)
+    return out_df
 
 
 # ----------------------------------------------------------
@@ -227,7 +338,7 @@ report year.
 
 
 def eia_pct_df_maker(df, col):
-    """Move fuel type row values to columns.
+    """Make fuel type row values into columns.
 
     Reorient dataframe by plant so that fuel type percentages are columns
     rather than row values. Used for merging with FERC Form 1 data. The
@@ -258,7 +369,7 @@ def eia_pct_df_maker(df, col):
     return pct_df
 
 
-def calc_eia_fuel_percentages(df, pct_col1, pct_col2):
+def calc_eia_fuel_pcts(df, pct_col1, pct_col2):
     """Calculate the fuel type breakdown for input columns.
 
     For use specifically in the eia_fuel_pcts() function where a DataFrame
@@ -295,6 +406,9 @@ def calc_eia_fuel_percentages(df, pct_col1, pct_col2):
 def prep_eia_data(df):
     """Group eia data by plant and fuel type.
 
+    This function readies the EIA data for merging with FERC data once it's
+    been disaggregated with EIA fuel breakdown percents.
+
     Args:
         df (pandas.DataFrame): A DataFrame with relevent eia data to be
             aggregated for integration with FERC Form 1 data.
@@ -313,10 +427,14 @@ def prep_eia_data(df):
 def eia_fuel_pcts(df):
     """Extract fuel type percents for use with FERC Form 1 Data.
 
-    This function uses other functions to find the breakdown of mcoe variable
-    columns (such as capacity and net generation) by plant and fuel type.
-    The DataFrame output is used to disaggretate Ferc Form 1 data in the same
-    manner.
+    This function pulls together the outputs of functions calc_eia_fuel_pcts()
+    (which itself calls eia_pct_df_maker()) to create an output DataFrame with
+    EIA data aggregated by plant with columns indicating the percent that each
+    fuel type contribues to the total capacity and net generation.
+
+    This data is now staged for a merge with FERC Form 1 data so that its cost
+    values can be multiplied by the EIA fuel percentages and disaggreated by
+    fuel type.
 
     Args:
         df (pandas.DataFrame): A DataFrame with relevent eia data to be
@@ -348,7 +466,7 @@ def eia_fuel_pcts(df):
     # accounts for for the specified columns (net gen & capacity)
     # **NOTE** cannot feed this function a list of col names beacuse merge
     # function does not take a list.
-    eia_pct_df = calc_eia_fuel_percentages(
+    eia_pct_df = calc_eia_fuel_pcts(
         eia_plant_fuel_df, 'net_generation_mwh', 'capacity_mw')
     # Return table needed for ferc fuel type delineation and final FERC1 merge.
     return eia_pct_df
@@ -366,7 +484,6 @@ def ferc1_plant_level_prep(df):
     Returns:
         pandas.DataFrame: A DataFrame with FERC Form 1 Data aggregated by
             plant.
-
     """
     logger.info('building FERC table broken down by plant')
     ferc1_plant_df = (
@@ -386,7 +503,11 @@ def ferc1_plant_level_prep(df):
 def ferc_cost_pct_breakdown(df):
     """Calculate FERC Form 1 cost breakdowns from EIA-923 fuel percentages.
 
-    For specific use within the merge_ferc_with_eia_pcts() function.
+    A helper function for specific use within the merge_ferc_with_eia_pcts()
+    function. Once the the outputs of eia_fuel_pcts() and ferc1_plant_level_
+    prep() are merged, this function serves to multiple the eia fuel pct
+    columns by the FERC values, so calculating the equivalent ferc cost
+    breakdown by fuel.
 
     Args:
         df (pandas.DataFrame): A DataFrame with raw ferc plant values
@@ -410,11 +531,15 @@ def ferc_cost_pct_breakdown(df):
 def cost_subtable_maker(df, cost):
     """Rearange cost breakdown data.
 
-    This function takes the FERC Form 1 data broken down by plant and fuel type
-    based on EIA percentages and melts it so that the fuel type columns become
-    row values again rather than columns. This function must be executed once
-    for every FERC value that has been disaggregated. (i.e. once for capex and
-    once for opex).
+    A helper function for specific use within the merge_ferc_with_eia_pcts()
+    function. It that takes the result of running ferc_cost_pct_breakdown() on
+    newly merged eia_fuel_pcts() output and ferc1_plant_level_prep() (which
+    outputs a table with ferc cost data broken down by fuel type) and melts it
+    so that the fuel type columns become row values again rather than columns.
+
+    This function must be executed once for every FERC value that has been
+    disaggregated. (i.e. once for capex and once for opex). The two melted
+    tables are later merged in the meta function merge_ferc_with_eia_pcts().
 
     Args:
         df (pandas.DataFrame): A DataFrame with FERC Form 1 data
@@ -447,7 +572,10 @@ def cost_subtable_maker(df, cost):
 def merge_ferc_with_eia_pcts(eia_pct_df, ferc_df):
     """Merge EIA fuel percents with FERC Form 1 data.
 
-    This function makes use of several of the other functions defined here.
+    This is a meta function that brings together the outputs of several other
+    functions to create a cohesive output: FERC Form 1 data broken down
+    by plant and fuel type. It's ready for merge with EIA data from prep_eia_
+    data().
 
     Args:
         eia_pct_df (pandas.DataFrame): A DataFrame with EIA aggregated by
@@ -473,7 +601,12 @@ def merge_ferc_with_eia_pcts(eia_pct_df, ferc_df):
 
 
 def merge_ferc_eia_mcoe(eia_fuel_df, ferc_fuel_df):
-    """Produce final EIA and FERC Form 1 Merge and calculate MCOE value.
+    """Produce final EIA and FERC Form 1 merge and calculate MCOE value.
+
+    This function combines the FERC Form 1 data, now disaggregated by plant and
+    fuel type, with EIA data aggregated in the same manner. It then runs
+    calculations to add columns for mcoe and rearanges/renames columns for
+    the desired output.
 
     Args:
         eia_fuel_df (pandas.DataFrame): A DataFrame with EIA data broken
@@ -516,7 +649,9 @@ def part2_main(pudl_out, start_yr=None, end_yr=None):
     """Create final data output for Part 2.
 
     A function that calls the other functions for Part 2 and outputs the mcoe
-    DataFrame.
+    DataFrame. It also adds a data validation check for heat rate, implementing
+    a boolean to indicate whether there are units within the plant/fuel
+    aggregation that are outliers.
 
     Args:
         pudl_out (pudl.output.pudltabl.PudlTabl): An object used to create
@@ -537,6 +672,7 @@ def part2_main(pudl_out, start_yr=None, end_yr=None):
                                          ferc1_plant_level_prep(ferc_raw))
     eia_prep = prep_eia_data(eia_raw)
     mcoe_df = merge_ferc_eia_mcoe(eia_prep, ferc_prep)
+    mcoe_df
     # Add heat rate comparison
     hr_df = compare_heatrate(pudl_out)
     # Make sure dfs are the same length before merging
@@ -553,8 +689,135 @@ def part2_main(pudl_out, start_yr=None, end_yr=None):
 
 
 # ----------------------------------------------------------
+# --------------------- * P A R T  3 * ---------------------
+# ----------------------------------------------------------
+
+"""
+Part 3 functions serve to add information about emissions and public health
+impacts.
+"""
+
+
+def get_cems():
+    """Retrieve CEMS data for a given year for all states.
+
+    This function requires running pudl and having epacems files stored in
+    parquets. Reads the parquet files and provides data from all years and
+    states on emissions. Takes a minute or so to run. Renames some fields for
+    eventual merge with EIA data.
+
+    Returns:
+        pandas.DataFrame: A DataFrame with emissions data for all states in
+            a given year.
+    """
+    client = Client()
+    cols = ['plant_id_eia', 'unitid',
+            'so2_mass_lbs', 'nox_mass_lbs', 'co2_mass_tons']
+    out_df = pd.DataFrame()
+    for yr in range(1995, 2019):
+        # TOP = jupyter; BOTTOM = atom (here)
+        epacems_path = (os.path.dirname(os.getcwd()) +
+                        f'/PUDL_DIR/parquet/epacems/year={yr}')
+        # epacems_path = (os.getcwd() + f'/PUDL_DIR/parquet/epacems/year={yr}')
+        cems_dd = (
+            dd.read_parquet(epacems_path, columns=cols)
+              .groupby(['plant_id_eia', 'unitid'])[
+                ['so2_mass_lbs', 'nox_mass_lbs', 'co2_mass_tons']]
+              .sum()
+        )
+        cems_df = (
+            client
+            .compute(cems_dd)
+            .result()
+            .assign(year=yr)
+        )
+        out_df = pd.concat([out_df, cems_df])
+    out_df = (
+        out_df.reset_index()
+              .rename(columns={'unitid': 'boiler_id', 'year': 'report_year'})
+    )
+    return out_df
+
+
+def add_cems_to_eia(part1_df, cems_df):
+    """Merge EIA plant or unit level data with CEMS emissions data.
+
+    Args:
+        part1_df (pandas.DataFrame): The output from running either
+            part1_df_creator(pudl_out, 'plant'), or part1_df_creator(pudl_out,
+            'unit').
+        cems_df: The output of running get_cems(). Added as a parameter so only
+            have to run get_cems() once because it takes a while.
+
+    Returns:
+        pandas.DataFrame: A DataFrame containing an merge of the part1 output
+            and the CEMS emissions data.
+    """
+    logger.info('adding cems to eia data')
+    id_cols = ['plant_id_eia', 'unit_id_pudl', 'generator_id',
+               'report_date']
+    cems_cols = ['so2_mass_lbs', 'nox_mass_lbs', 'co2_mass_tons']
+    raw_df = pudl_out.mcoe()
+    bga = pudl_out.bga()
+    # Add boiler id to EIA data. Boilder id matches (almost) with CEMS unitid.
+    eia_with_boiler_id = date_to_year(
+        pd.merge(raw_df[id_cols+['plant_id_pudl', 'fuel_type_code_pudl']],
+                 bga[id_cols+['boiler_id']], on=id_cols, how='left')
+    )
+    eia_cems_merge = (
+        pd.merge(eia_with_boiler_id, cems_df, on=['plant_id_eia', 'boiler_id',
+                 'report_year'], how='left')
+          .groupby(['plant_id_pudl', 'plant_id_eia', 'unit_id_pudl',
+                    'fuel_type_code_pudl', 'report_year'])[cems_cols].sum()
+          .reset_index()
+    )
+    # Merge with part 1 outputs; either maintain unit legel or merge to plant
+    if 'unit_id_pudl' in part1_df.columns.to_list():
+        out_df = pd.merge(part1_df, eia_cems_merge,
+                          on=['plant_id_pudl', 'plant_id_eia', 'unit_id_pudl',
+                              'fuel_type_code_pudl', 'report_year'],
+                          how='left')
+    else:
+        eia_cems_merge = (
+            eia_cems_merge.groupby(['plant_id_pudl', 'fuel_type_code_pudl',
+                                    'report_year'])[cems_cols].sum()
+        )
+        out_df = pd.merge(part1_df, eia_cems_merge, on=['plant_id_pudl',
+                          'report_year'], how='left')
+    return out_df
+
+
+# This function is kind of arbitrary. Could just add the 'add_cems_to_eia()'
+# function to part one and call it a day. This is more for organization's sake.
+def part3_main(pudl_out, cems_df, level):
+    """Output EIA plant or unit level data according to desired level.
+
+    Args:
+        pudl_out (pudl.output.pudltabl.PudlTabl): An object used to create
+            the mcoe table used for eia analysis.
+        cems_df (pandas.DataFrame): A dataframe containing the relevant CEMS
+            data on emissions.
+        level (str): the level (either 'unit' or 'plant') that you wish to
+            aggregate by.
+    Returns:
+        pandas.DataFrame: A DataFrame containing EIA data merge with CEMS
+            emissions data aggregated either by plant or unit and fuel type.
+    """
+    eia_raw = pudl_out.mcoe()
+    eia_raw = add_generator_age(date_to_year(eia_raw))
+    part1_df = part1_df_creator(eia_raw, level)
+    out_df = add_cems_to_eia(part1_df, cems_df)
+    return out_df
+
+
+# ----------------------------------------------------------
 # ------------------- Data Validation ----------------------
 # ----------------------------------------------------------
+
+"""
+Data validation functions are used to confirm the FERC Form 1 EIA overlap.
+They consist of numeric and graphic manipulations.
+"""
 
 
 def compare_heatrate(pudl_out):
@@ -570,7 +833,7 @@ def compare_heatrate(pudl_out):
 
     Args:
         df (pandas.DataFrame): A DataFrame with plant and fuel type data
-            produced by running part1_main('unit').
+            produced by running part1_df_creator(pudl_out, 'unit').
     Returns:
         pandas.DataFrame: A Dataframe with a boolean column to show whether
             the heat rate of a given unit supercedes the total plant heat rate
@@ -578,8 +841,10 @@ def compare_heatrate(pudl_out):
     """
     logger.info('comparing heat rates internally')
     # Get plant and unit level wahr then merge for comparison.
-    plant_level = part1_main(pudl_out, 'plant')
-    unit_level = part1_main(pudl_out, 'unit')
+    eia_raw = pudl_out.mcoe()
+    eia_raw = add_generator_age(date_to_year(eia_raw))
+    plant_level = part1_df_creator(eia_raw, 'plant')
+    unit_level = part1_df_creator(eia_raw, 'unit')
     # Calculate significant difference in heat rate. I chose one based
     # on approximate differences here:
     # https://www.eia.gov/electricity/annual/html/epa_08_01.html
@@ -593,6 +858,7 @@ def compare_heatrate(pudl_out):
           .groupby(input_dict['fuel_index_cols'])['sig_hr'].any()
           .reset_index()
     )
+    logger.info('finished heatrate')
     return plant_unit_merge
 
 
@@ -842,6 +1108,6 @@ def plot_fuel_pct_check(df):
     cost_ax.set_xlabel(xlabel)
     cost_ax.set_title('EIA / FERC Form 1 Cost Fractions')
     cost_ax.legend()
-    #plt.savefig("ferc1_eia_fuel_pct_check.png")
+    # plt.savefig("ferc1_eia_fuel_pct_check.png")
     plt.tight_layout()
     plt.show()
