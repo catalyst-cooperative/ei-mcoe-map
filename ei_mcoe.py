@@ -12,10 +12,13 @@ from scipy import stats
 import dask.dataframe as dd
 from dask.distributed import Client
 import os
+import numpy as np
 
 import logging
 logger = logging.getLogger(__name__)
 
+
+pudl.__file__
 
 pudl_settings = pudl.workspace.setup.get_defaults()
 pudl_engine = sa.create_engine(pudl_settings["pudl_db"])
@@ -48,11 +51,60 @@ eia_wa_col_dict = {
 
 fuel_types = ['coal', 'gas', 'oil', 'waste']
 
+greet_tech_list = ['Boiler',
+                   'IGCC',
+                   'Combined_Cycle',
+                   'Gas_Turbine',
+                   'ICE',
+                   'Not_Specified']
+
+tech_rename_greet = {'Conventional Steam Coal': 'Boiler',
+                     'Coal Integrated Gasification Combined Cycle': 'IGCC',
+                     'Natural Gas Fired Combined Cycle': 'Combined_Cycle',
+                     'Natural Gas Steam Turbine': 'Gas_Turbine',
+                     'Petroleum Coke': 'Boiler',
+                     'Petroleum Liquids': 'ICE',
+                     'Landfill Gas': 'Boiler',  # Not sure...
+                     'Wood/Wood Waste Biomass': 'Boiler'}
+
+nerc_regions = ['US', 'ASCC', 'FRCC', 'HICC', 'MRO', 'NPCC',
+                'RFC', 'SERC', 'SPP', 'TRE', 'WECC']
+
+#g/kWh
+pm_tech_dict = {
+    'coal_Boiler': [0.043, 3.504, 0.131, 0.118, 0.110, 0.185, 0.257, 0.180,
+                    0.161, 0.110, 0.247],
+    'coal_IGCC': [0.008, 0.008, 0.568, 0.008, 0.008, 0.008, 0.008, 0.008,
+                  0.008, 0.008, 0.008],
+    'coal_Not_Specified': 0.026,
+    'oil_Gas Turbine': [0.070, 0.039, 0.079, 0.081, 0.122, 0.083, 0.089, 0.087,
+                        0.155, 0.083, 0.067],
+    'oil_ICE': [0.012, 0.039, 0.079, 0.081, 0.122, 0.083, 0.089, 0.087, 0.155,
+                0.083, 0.067],
+    'oil_Boiler': [0.132, 0.039, 0.079, 0.081, 0.122, 0.083, 0.089, 0.087,
+                   0.155, 0.083, 0.067],
+    'oil_Not_Specified': 0.071,
+    'gas_Combined_Cycle': [0.001, 0.001, 0.001, 0.001, 0.001, 0.001, 0.001,
+                           0.001, 0.001, 0.001, 0.001],
+    'gas_Gas_Turbine': [0.036, 0.038, 0.036, 0.026, 0.040, 0.036, 0.049, 0.036,
+                        0.036, 0.043, 0.037],
+    'gas_ICE': [0.455, 0.455, 0.483, 0.455, 0.528, 0.524, 0.510, 0.492, 0.357,
+                0.397, 0.414],
+    'gas_Boiler': [0.041, 0.041, 0.023, 0.041, 0.041, 0.038, 0.040, 0.053,
+                   0.041, 0.040, 0.045],
+    'gas_Not_Specified': 0.133,
+    'waste_Boiler': [0.610, 1.235, 2.495, 2.021, 1.804, 1.836, 1.904, 2.014,
+                     1.271, 0.610, 2.053],
+    'waste_Not_Specified': 0.610
+}
+
+# need to add some / decide what do to with blanks
 data_sources = {'plant_id_pudl': 'pudl',
                 'unit_id_pudl': 'pudl',
                 'fuel_type_code_pudl': 'pudl',
                 'plant_id_eia': 'eia860',
                 'report_year': 'eia860',
+                'technology_description': 'eia860',
                 'state': 'eia860',
                 'city': 'eia860',
                 'latitude': 'eia860',
@@ -63,6 +115,7 @@ data_sources = {'plant_id_pudl': 'pudl',
                 'so2_mass_lbs': 'CEMS',
                 'nox_mass_libs': 'CEMS',
                 'co2_mass_tons': 'CEMS',
+                'pm2.5_mass_tons': 'GREET Electricity Generation; table 2.1',
                 'variable_om_mwh_ferc1': 'FERC Form 1',
                 'fixed_om_mwh_ferc1': 'FERC Form 1',
                 'count': '',
@@ -131,7 +184,7 @@ def test_segment(df):
             df.loc[df['plant_id_pudl'] == 32]
             .sort_values('report_year', ascending=False)
         )
-    elif type(df.columns == pd.core.indexes.multi.MultiIndex):
+    elif type(df.columns) == pd.core.indexes.multi.MultiIndex:
         df = (
             df.loc[df[('pudl', 'plant_id_pudl')] == 32]
             .sort_values(('eia860', 'report_year'), ascending=False)
@@ -229,18 +282,6 @@ def regroup_data(df, idx_cols, merge_cols=[], wa_col_dict=None, sum_cols=None):
     return result_df
 
 
-# ----------------------------------------------------------
-# --------------------- * P A R T  1 * ---------------------
-# ----------------------------------------------------------
-
-"""
-Part 1 Functions are mostly neutral and applicable accross eia and ferc
-datasets therefore they're primarily located in the 'fluid functions' section.
-The part1_main() function pulls all of the information together and is the only
-function that needs to pull together the full output.
-"""
-
-
 def add_source_cols(df):
     """Create column multindex to specify data sources.
 
@@ -266,6 +307,18 @@ def add_source_cols(df):
     return df
 
 
+# ----------------------------------------------------------
+# --------------------- * P A R T  1 * ---------------------
+# ----------------------------------------------------------
+
+"""
+Part 1 Functions are mostly neutral and applicable accross eia and ferc
+datasets therefore they're primarily located in the 'fluid functions' section.
+The part1_main() function pulls all of the information together and is the only
+function that needs to pull together the full output.
+"""
+
+
 def part1_df_creator(df, level):
     """Create final data output for Part 1.
 
@@ -282,7 +335,6 @@ def part1_df_creator(df, level):
     # Prep mcoe table data
     if level == 'plant':
         level = 'fuel'
-
     level_df = regroup_data(df, input_dict[level+'_index_cols'],
                             merge_cols=input_dict['merge_cols_qual'],
                             wa_col_dict=eia_wa_col_dict,
@@ -505,7 +557,7 @@ def ferc_cost_pct_breakdown(df):
 
     A helper function for specific use within the merge_ferc_with_eia_pcts()
     function. Once the the outputs of eia_fuel_pcts() and ferc1_plant_level_
-    prep() are merged, this function serves to multiple the eia fuel pct
+    prep() are merged, this function serves to multiply the eia fuel pct
     columns by the FERC values, so calculating the equivalent ferc cost
     breakdown by fuel.
 
@@ -696,6 +748,7 @@ def part2_main(pudl_out, start_yr=None, end_yr=None):
 Part 3 functions serve to add information about emissions and public health
 impacts.
 """
+# cems_df = get_cems()
 
 
 def get_cems():
@@ -710,15 +763,15 @@ def get_cems():
         pandas.DataFrame: A DataFrame with emissions data for all states in
             a given year.
     """
+    logger.info('getting CEMS data....this may take a sec.')
     client = Client()
     cols = ['plant_id_eia', 'unitid',
             'so2_mass_lbs', 'nox_mass_lbs', 'co2_mass_tons']
     out_df = pd.DataFrame()
     for yr in range(1995, 2019):
         # TOP = jupyter; BOTTOM = atom (here)
-        epacems_path = (os.path.dirname(os.getcwd()) +
-                        f'/PUDL_DIR/parquet/epacems/year={yr}')
-        # epacems_path = (os.getcwd() + f'/PUDL_DIR/parquet/epacems/year={yr}')
+        epacems_path = (os.path.dirname(os.getcwd())+f'/PUDL_DIR/parquet/epacems/year={yr}')
+        #epacems_path = os.getcwd() + f'/PUDL_DIR/parquet/epacems/year={yr}'
         cems_dd = (
             dd.read_parquet(epacems_path, columns=cols)
               .groupby(['plant_id_eia', 'unitid'])[
@@ -739,7 +792,7 @@ def get_cems():
     return out_df
 
 
-def add_cems_to_eia(part1_df, cems_df):
+def add_cems_to_eia(part1_df, cems_df, eia_raw, level):
     """Merge EIA plant or unit level data with CEMS emissions data.
 
     Args:
@@ -753,15 +806,16 @@ def add_cems_to_eia(part1_df, cems_df):
         pandas.DataFrame: A DataFrame containing an merge of the part1 output
             and the CEMS emissions data.
     """
+    level = 'plant'
+
     logger.info('adding cems to eia data')
     id_cols = ['plant_id_eia', 'unit_id_pudl', 'generator_id',
-               'report_date']
+               'report_year']
     cems_cols = ['so2_mass_lbs', 'nox_mass_lbs', 'co2_mass_tons']
-    raw_df = pudl_out.mcoe()
-    bga = pudl_out.bga()
+    bga = date_to_year(pudl_out.bga())
     # Add boiler id to EIA data. Boilder id matches (almost) with CEMS unitid.
-    eia_with_boiler_id = date_to_year(
-        pd.merge(raw_df[id_cols+['plant_id_pudl', 'fuel_type_code_pudl']],
+    eia_with_boiler_id = (
+        pd.merge(eia_raw[id_cols+['plant_id_pudl', 'fuel_type_code_pudl']],
                  bga[id_cols+['boiler_id']], on=id_cols, how='left')
     )
     eia_cems_merge = (
@@ -771,24 +825,188 @@ def add_cems_to_eia(part1_df, cems_df):
                     'fuel_type_code_pudl', 'report_year'])[cems_cols].sum()
           .reset_index()
     )
-    # Merge with part 1 outputs; either maintain unit legel or merge to plant
-    if 'unit_id_pudl' in part1_df.columns.to_list():
-        out_df = pd.merge(part1_df, eia_cems_merge,
-                          on=['plant_id_pudl', 'plant_id_eia', 'unit_id_pudl',
-                              'fuel_type_code_pudl', 'report_year'],
-                          how='left')
-    else:
-        eia_cems_merge = (
-            eia_cems_merge.groupby(['plant_id_pudl', 'fuel_type_code_pudl',
-                                    'report_year'])[cems_cols].sum()
+    # Merge with part 1 outputs; either maintain unit level or merge to plant
+    if level == 'unit':
+        eia_cems_agg = (
+            eia_cems_merge
+            .groupby(input_dict[level+'_index_cols'])[cems_cols]
+            .sum()
+            .reset_index()
         )
-        out_df = pd.merge(part1_df, eia_cems_merge, on=['plant_id_pudl',
-                          'report_year'], how='left')
+    else:
+        eia_cems_agg = (
+            eia_cems_merge
+            .groupby(input_dict[level+'_index_cols'])[cems_cols]
+            .sum()
+            .reset_index()
+        )
+    out_df = (
+        pd
+        .merge(part1_df, eia_cems_agg,
+               on=input_dict[level+'_index_cols'], how='left')
+        )
     return out_df
 
 
-# This function is kind of arbitrary. Could just add the 'add_cems_to_eia()'
-# function to part one and call it a day. This is more for organization's sake.
+def calc_tech_pct(raw_df, level):
+    """Show technology percent at a given aggregation level.
+
+    This function takes in the raw EIA data file and calculates the generation
+    technology percent make up of a given level of aggregation based on the
+    stated capacity of that generator. For example, if fed "plant", the
+    function will calculate what percent of the plant (at the fuel level) is
+    made up of boilers vs combined cycle vs. the other technology options.
+
+    Args:
+        raw_df (pandas.DataFrame): A DataFrame with raw EIA data with generator
+            age and report_year calculated.
+        level (str): Either 'plant' or 'unit' to indicate the level of
+            aggregation.
+
+    Returns:
+        pandas.DataFrame: A DataFrame showing the percent breakdown of each
+            generation technology type per 'level' (plant or unit broken down
+            by fuel). Rows for level, columns for technology type.
+    """
+    # Map GREET names onto tech description and find totals for level of
+    # aggregation specified.
+    logger.info('calculating tech percents')
+    if level == 'plant':
+        level = 'fuel'
+
+    greet_df = (
+        raw_df
+        .assign(greet_tech=lambda x: x.technology_description
+                .map(tech_rename_greet)
+                .fillna('Not_Specified'))
+    )
+    # Calculate level totals
+    total_df = (
+        raw_df
+        .groupby(input_dict[level+'_index_cols'])[input_dict['eia_sum_cols']]
+        .sum()
+        .reset_index()
+        .rename(columns={'capacity_mw': 'cap_total_mw',
+                         'net_generation_mwh': 'net_gen_total_mwh'})
+    )
+    # Merge back to raw data to get sidebyside capacity values for pct calc.
+    merge_df1 = (
+        pd
+        .merge(greet_df, total_df, on=input_dict[level+'_index_cols'],
+               how='left'))
+    # Separate because need to put variable into assign statement. Pivots
+    # table so that each row is the level specified and there are columns for
+    # each technology type percent. Return with net_gen total to tranform
+    # GREET numbers from mwh to annual values.
+    merge_df = (
+        merge_df1
+        .assign(pct=(merge_df1['capacity_mw']/merge_df1['cap_total_mw'])
+                .round(2))
+        .pivot_table('pct', (input_dict[level+'_index_cols'] +
+                     ['net_gen_total_mwh', 'nerc_region']),
+                     'greet_tech', np.sum)
+        .fillna(0)
+        .reset_index()
+    )
+    return merge_df
+
+
+def calc_pm_value(tech_df, level):
+    """Calculate pm2.5 value at level of aggregation.
+
+    This function calculates the amount of pm2.5 associated with each unit or
+    plant by fuel type by figuring out what kinds of generator technologies are
+    used in that aggregation unit and then multiplying their percent make up (
+    based on capacity) by net generation (mwh/year) and the values for kwh/mwh
+    (1000/1) and lb/g (1/454) to convert to pm2.5lb/year.
+
+    Args:
+        tech_df (pandas.DataFrame): The output of calc_tech_pct() - a DataFrame
+            with the percents for each technology (based on capacity) shown as
+            columns with rows for each level of aggregation (unit or plant).
+        level (str): Either 'plant' or 'unit' to depict which level of
+            aggregation is desired. Must be consistent throughout.
+
+    Returns:
+        pandas.DataFrame: A DataFrame with the value for pm2.5 in lb/year
+            calculated based on tech type values in g/kwh from the GREET model.
+    """
+    logger.info('calculating pm2.5 values')
+    if level == 'plant':
+        level = 'fuel'
+    # Make technology columns into rows; calculate pm2.5 lb/year value.
+    pm_df = (
+        pd
+        .melt(tech_df, (input_dict[level+'_index_cols'] +
+              ['net_gen_total_mwh', 'nerc_region']))
+        .assign(pm_id=lambda x: x.fuel_type_code_pudl+'_'+x.greet_tech)
+    )
+    # Must do this part separatly because does not work in assign...
+    pm_df['pm2.5_mass_lb'] = (
+        pm_df
+        .apply(lambda x: cnct_rgn_tech_to_pm_value(x.nerc_region, x.pm_id),
+               axis=1)
+        .round(3)
+    )
+    # Must do separately becasue its a series...(don't really understand)
+    # Go from g/kwh to mwh/year
+    pm_df = (
+        pm_df
+        .assign(pm_mass_lb=lambda x: (x['pm2.5_mass_lb'] * x.net_gen_total_mwh
+                                      * 1000 / 450))
+        .groupby(input_dict[level+'_index_cols'])['pm_mass_lb']
+        .sum()
+        .reset_index()
+    )
+    return pm_df
+
+
+def cnct_rgn_tech_to_pm_value(nerc, tech):
+    """Connect NERC region and tech type to PM2.5 value.
+
+    This function is for specific use in calc_pm_value(). It finds the right
+    PM2.5 value based on GREET designation by NERC region and technology type.
+    Important to note that these values are still in g/kwh.
+
+    Args:
+        nerc (pd.Series): The column 'nerc_region' in the pm_df.
+        tech (pd.Series): The column 'pm_id' created in the pm_df.
+
+    Returns:
+        float: the PM2.5 value associated with a given NERC region and
+            technology type.
+    """
+    if tech not in pm_tech_dict.keys():
+        pm_value = 0
+    elif 'Not_Specified' in tech:
+        pm_value = pm_tech_dict[tech]
+    else:
+        idx = nerc_regions.index(nerc)
+        pm_value = pm_tech_dict[tech][idx]
+    return pm_value
+
+
+def pm_out(raw_df, level):
+    """Output DataFrame with level  index cols and adjusted pm2.5 values."""
+    tech_df = calc_tech_pct(raw_df, level)
+    pm_out = calc_pm_value(tech_df, level)
+    return pm_out
+
+
+def all_health_out(eia_raw, cems_df, greet_df, level):
+    """Merge EIA, CEMS, and GREET data into one based on specified level."""
+    level = 'unit'
+    if level == 'plant':
+        level = 'fuel'
+    part1_df = part1_df_creator(eia_raw, level)
+    eia_cems_df = add_cems_to_eia(part1_df, cems_df, eia_raw, level)
+    greet_df = pm_out(eia_raw, level)
+    eia_cems_greet_df = pd.merge(eia_cems_df, greet_df,
+                                 on=input_dict[level+'_index_cols'],
+                                 how='outer')
+    return eia_cems_greet_df
+
+
 def part3_main(pudl_out, cems_df, level):
     """Output EIA plant or unit level data according to desired level.
 
@@ -803,19 +1021,20 @@ def part3_main(pudl_out, cems_df, level):
         pandas.DataFrame: A DataFrame containing EIA data merge with CEMS
             emissions data aggregated either by plant or unit and fuel type.
     """
-    eia_raw = pudl_out.mcoe()
-    eia_raw = add_generator_age(date_to_year(eia_raw))
-    part1_df = part1_df_creator(eia_raw, level)
-    out_df = add_cems_to_eia(part1_df, cems_df)
-    return out_df
-
+    eia_raw = add_generator_age(date_to_year(pudl_out.mcoe()))
+    cems_df = cems_df
+    greet_df = pm_out(eia_raw, level)
+    all_health_df = all_health_out(eia_raw, cems_df, greet_df, level)
+    logger.info('Part 3 Output Done!')
+    return all_health_df
 
 # ----------------------------------------------------------
 # ------------------- Data Validation ----------------------
 # ----------------------------------------------------------
 
 """
-Data validation functions are used to confirm the FERC Form 1 EIA overlap.
+Data validation functions
+are used to confirm the FERC Form 1 EIA overlap.
 They consist of numeric and graphic manipulations.
 """
 
