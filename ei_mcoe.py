@@ -22,9 +22,9 @@ logger = logging.getLogger(__name__)
 
 # Below, for TESTING PURPOSES
 
-pudl_settings = pudl.workspace.setup.get_defaults()
-pudl_engine = sa.create_engine(pudl_settings["pudl_db"])
-pudl_out = pudl.output.pudltabl.PudlTabl(pudl_engine, freq='AS',rolling=True)
+#pudl_settings = pudl.workspace.setup.get_defaults()
+#pudl_engine = sa.create_engine(pudl_settings["pudl_db"])
+#pudl_out = pudl.output.pudltabl.PudlTabl(pudl_engine, freq='AS',rolling=True)
 
 # ----------------------------------------------------------
 # -------------------- Constants ---------------------------
@@ -170,16 +170,13 @@ name_clean_dict = {
     'max_min_hr_diff': 'Difference Between Maximum and Minimum Unit Heat Rates',
     'total_fuel_cost': 'Fuel Cost',
     'fix_var_om_mwh': 'Total O&M MWh',
-    'fixed_cost': 'Fixed Cost',
     'variable_cost': 'Variable Cost',
-    # 'variable_om_mwh': 'Variable O&M',
-    # 'fixed_om_mwh': 'Fixed O&M',
-    # 'variable_om_mwh_ferc1': 'Variable O&M (FERC1)',
-    # 'fixed_om_mwh_ferc1': 'Fixed O&M (FERC1)',
-    # 'variable_om_mw_nems': 'Variable O&M (NEMS)',
-    # 'fixed_om_mwh_nems': 'Fixed O&M (NEMS)',
-    # 'variable_om_is_NEMS': 'Variable O&M used NEMS?',
-    # 'fixed_om_is_NEMS': 'Fixed O&M used NEMS?',
+    'fixed_cost': 'Fixed Cost',
+    'variable_om_mwh_18': 'Variable Cost (NEMS)',
+    'fixed_om_mwh_18': 'Fixed Cost (NEMS)',
+    'variable_om_mwh': 'Variable Cost MWh',
+    'fixed_om_mw': 'Fixed Cost MW',
+    'fix_var_is_NEMS': 'Total O&M MWh used NEMS',
     'mcoe': 'Marginal Cost of Energy',
     'co2_mass_tons': 'Annual CO2 Emissions tons',
     'nox_mass_tons': 'Annual NOx Emissions tons',
@@ -220,14 +217,11 @@ data_source_dict = {
     'Total O&M MWh': ['FERC Form 1', 'FERC costs disaggregated based on EIA fuel percent of net generation. Comes from FERC value opex_nofuel'],
     'Fixed Cost': ['', 'calculated from NEMS EMM variable cost multipliers'],
     'Variable Cost': ['', 'calculated from NEMS EMM variable cost multipliers'],
-    # 'Variable O&M': ['FERC Form 1 & NEMS', 'FERC costs disaggregated based on EIA fuel percent of net generation; NEMS added for 2018 values (though likely more recent)'],
-    # 'Fixed O&M': ['FERC Form 1 & NEMS', 'FERC costs disaggregated based on EIA fuel percent of net generation; NEMS added for 2018 values (though likely more recent)'],
-    # 'Variable O&M used NEMS?': ['NEMS', 'pltf860.txt column no.63; aggregated by sum; True indicates use of NEMS in Variable O&M column'],
-    # 'Fixed O&M used NEMS?': ['NEMS', 'pltf860.txt column no.64; aggregated by sum; True indicates use of NEMS in Fixed O&M column'],
-    # 'Variable O&M (FERC1)': ['FERC Form 1', 'table X; disaggregated based on EIA fuel percent of net generation'],
-    # 'Fixed O&M (FERC1)': ['FERC Form 1', 'table X; disaggregated based on EIA fuel percent of capacity'],
-    # 'Variable O&M (NEMS)': ['NEMS', 'pltf860.txt column no.63; aggregated by sum'],
-    # 'Fixed O&M (NEMS)': ['NEMS', 'pltf860.txt column no.64; aggregated by sum'],
+    'Variable Cost (NEMS)': ['NEMS', 'pltf860.txt column no.63; aggregated by sum'],
+    'Fixed Cost (NEMS)': ['NEMS', 'pltf860.txt column no.63; aggregated by sum'],
+    'Variable Cost MWh': ['', 'calculated by dividing variable cost by net generation'],
+    'Fixed Cost MW': ['', 'calculated by dividing fixed cost by capacity'],
+    'Total O&M MWh used NEMS': ['NEMS', 'pltf860.txt column no.64; aggregated by sum; True indicates use of NEMS in Fixed O&M column'],
     'Marginal Cost of Energy': ['', 'Calculated with EIA923 fuel cost, net generation, and FERC Form 1 O&M costs'],
     'Annual CO2 Emissions tons': ['CEMS', 'table X; reported in tons/kwh'],
     'Annual NOx Emissions tons': ['CEMS', 'table X; reported in lbs/kwh'],
@@ -244,7 +238,7 @@ data_source_dict = {
 # ----------------------------------------------------------
 
 
-def _date_to_year(mcoe_out_df):
+def date_to_year(mcoe_out_df):
     """Convert report_date to report_year for EIA FERC integration.
 
     This function synchonizes FERC Form 1 and EIA data. FERC
@@ -267,7 +261,7 @@ def _date_to_year(mcoe_out_df):
     return year_df
 
 
-def _add_generator_age(with_year_raw_eia_df):
+def add_generator_age(with_year_raw_eia_df):
     """Calculate and add a column for generator age.
 
     This function calculates generator age by subtracting the year the
@@ -291,7 +285,7 @@ def _add_generator_age(with_year_raw_eia_df):
     return gen_df
 
 
-def _eliminate_retired_plants(raw_eia_all_plants_df):
+def eliminate_retired_plants(raw_eia_all_plants_df):
     """Eliminate plants with retirement dates.
 
     Args:
@@ -327,7 +321,7 @@ def _eliminate_retired_plants(raw_eia_all_plants_df):
     return raw_no_retired_df
 
 
-def _make_var_cost_multiplier_key(cap, greet_tech, fuel_type):
+def make_var_cost_multiplier_key(cap, greet_tech, fuel_type):
     """Make a column that specifies the fuel, technology, and capacity.
 
     Used to make a multiplier column to calculate the variable and fixed
@@ -348,7 +342,72 @@ def _make_var_cost_multiplier_key(cap, greet_tech, fuel_type):
     return multiplier_code
 
 
-def _add_var_cost_col(raw_eia_all_plants_df):
+def pull_fred_inflation_df():
+    """Read FRED inflation data from API."""
+    fred_api = Fred(api_key=FRED_API_KEY)
+    data = fred_api.get_series('CUUR0000SAH2')
+    df = pd.DataFrame(data).reset_index()
+    df.columns = ['date', 'value']
+    df['year'] = df['date'].apply(lambda x: x.year)
+    df['month'] = df['date'].apply(lambda x: x.month)
+    df = df.loc[df['month'] == 1]
+    return df
+
+
+def calc_inflation(index, base_year, df, cost_col_name):
+    """Calculate new cost with inflation depending on index specified.
+
+    This function calculates inflation using two different indexes. First,
+    the one used in the NEMS model ('nems') to calculate nominal fixed and
+    variable costs of NEMS data (reported in 87$ - equivalent to 1). Second,
+    the FRED Consumer Price Index for All Urban Consumers: Fuels and Utilities
+    in U.S. City Average ('fred').
+
+    Args:
+        index (str): The desired index to use for the inflation calculation
+            (either 'nems' or 'fred'). NEMS index coded to only read 2018
+            values.
+        base_year (int): The $year the cost values are reported in. Important
+            for 'fred' calculations.
+        df (pandas.DataFrame): The DataFrame containing the column on which
+            you'd like to run an inflation calculation.
+        cost_col_names (list): The names of the column of values you'd like to
+            calculate inflation for.
+    Returns:
+        pd.DataFrame: The new, inflation adjusted values for a given year under
+            the same name as the original column.
+    """
+    # For use with NEMS fixed and variable cost data. Reported in '87' dollars
+    # which are equal to 1 and only used for 2018 data. (Technically 2019, but
+    # will report as 2018)
+    if index == 'nems':
+        nems_idx = pd.read_excel(
+            'NEMS_GDP_infl.xlsx', header=3, names=['Year', 'Rate'])
+        nems_2018 = float(nems_idx.loc[nems_idx['Year'] == 2018].Rate)
+        df[cost_col_name] = df[cost_col_name] * nems_2018
+        infl_df = df.rename(
+            columns={cost_col_name: cost_col_name[:-2]+'18_nems'})
+    # For use with public health damages calculation and fixed / variable cost.
+    if index == 'fred':
+        fred_df = pull_fred_inflation_df()
+        fred_dict = dict(zip(fred_df.year, fred_df.value))
+        base_val = (
+            fred_df.loc[fred_df['year'] == base_year]
+            .reset_index()['value'][0])
+        infl_df = (
+            df.assign(
+                nom_val=lambda x: x.report_year.map(fred_dict),
+                base_val=base_val,
+                pct_chg=lambda x: (x.nom_val - base_val) / base_val,
+                infl_cost=lambda x: (
+                    x[cost_col_name] + (x[cost_col_name] * x.pct_chg)))
+            .drop(cost_col_name, axis=1)
+            .rename(columns={'infl_cost': cost_col_name}))
+    return infl_df
+
+
+def add_var_cost_col(raw_eia_all_plants_df):
+    """Add variable cost column adjusted for inflation."""
     raw_eia_all_plants_df['greet_tech'] = (
         raw_eia_all_plants_df['technology_description']
         .map(tech_rename_greet)
@@ -358,10 +417,14 @@ def _add_var_cost_col(raw_eia_all_plants_df):
             lambda x: make_var_cost_multiplier_key(
                 x.capacity_mw, x.greet_tech, x.fuel_type_code_pudl), axis=1)
         .map(nems_var_cost_multipliers))
-    fixed_var_df = (
+    var_cost_df = (
         raw_eia_all_plants_df.assign(
             variable_cost=lambda x: (x.var_cost_multiplier
                                      * x.net_generation_mwh)))
+    # Account for inflation - calculate nominal price for each year
+    var_cost_with_inflation_df = (
+        calc_inflation('fred', 2017, var_cost_df, 'variable_cost'))
+    return var_cost_with_inflation_df
 
 
 def prep_raw_eia(pudl_out):
@@ -381,10 +444,10 @@ def prep_raw_eia(pudl_out):
     logger.info('Prepping raw EIA data')
     raw_eia = pudl_out.mcoe().astype({'plant_id_eia': 'Int64'})
     raw_eia = raw_eia[raw_eia.plant_id_pudl.notnull()]
-    year_df = _date_to_year(raw_eia)
-    year_age_df = _add_generator_age(year_df)
-    year_age_no_retired_plants_df = _eliminate_retired_plants(year_age_df)
-    with_var_cost_df = _add_var_cost_col(year_age_no_retired_plants_df)
+    year_df = date_to_year(raw_eia)
+    year_age_df = add_generator_age(year_df)
+    year_age_no_retired_plants_df = eliminate_retired_plants(year_age_df)
+    with_var_cost_df = add_var_cost_col(year_age_no_retired_plants_df)
     return with_var_cost_df
 
 
@@ -460,49 +523,6 @@ def weighted_average(df, wa_col_dict, idx_cols):
         result = result.to_frame(name='weighted_ave_' + data).reset_index()
         merge_df = pd.merge(merge_df, result, on=idx_cols, how='outer')
     return merge_df
-
-
-def calc_inflation(index, base_year, nominal_year, cost_col):
-    """Calculate new cost with inflation depending on index specified.
-
-    This function calculates inflation using two different indexes. First,
-    the one used in the NEMS model ('nems') to calculate nominal fixed and
-    variable costs of NEMS data (reported in 87$ - equivalent to 1). Second,
-    the FRED Consumer Price Index for All Urban Consumers: Fuels and Utilities
-    in U.S. City Average ('fred').
-
-    Args:
-        index (str): The desired index to use for the inflation calculation
-            (either 'nems' or 'fred'). NEMS index coded to only read 2018
-            values.
-        base_year (int): The $year the cost values are reported in. Important
-            for 'fred' calculations.
-        nominal_year (int): The year you'd like to calculate nominal value for.
-        cost_col (pd.Series): The original column of values you'd like to
-            calculate inflation for.
-    Returns:
-        pd.Series: The new, inflation adjusted values for a given year.
-    """
-    # For use with NEMS fixed and variable cost data. Reported in '87' dollars.
-    if index == 'nems':
-        nems_idx = pd.read_excel('NEMS_GDP_infl.xlsx', header=3,
-                                 names=['Year', 'Rate'])
-        nems_2018 = float(nems_idx.loc[nems_idx['Year'] == 2018].Rate)
-        new_cost = cost_col * nems_2018
-    # For use with public health damages calculation.
-    elif index == 'fred':
-        fred_api = Fred(api_key=FRED_API_KEY)
-        data = fred_api.get_series('CUUR0000SAH2')
-        df = pd.DataFrame(data).reset_index()
-        df.columns = ['date', 'value']
-        df['year'] = df['date'].apply(lambda x: x.year)
-        df['month'] = df['date'].apply(lambda x: x.month)
-        df = df.loc[df['month'] == 1]
-        base_val = df.loc[df['year'] == base_year].reset_index()['value'][0]
-        nom_val = df.loc[df['year'] == year].reset_index()['value'][0]
-        pct_chg = (nom_val - base_val) / base_val
-        new_cost = cost_col * pct_chg
-    return new_cost
 
 
 def add_source_cols(df):
@@ -751,7 +771,8 @@ def fuel_type_to_col_eia(eia_plant_fuel_df, col):
     logger.info('Turning eia fuel percent values for ' + col + ' into columns')
     pcts_as_cols_df = (
         eia_plant_fuel_df.pivot_table(
-            'pct_' + col, input_dict['plant_index_cols'], 'fuel_type_code_pudl')
+            'pct_' + col, input_dict['plant_index_cols'],
+            'fuel_type_code_pudl')
         .reset_index()
         .rename(columns={'coal': 'pct_' + col + '_coal',
                          'gas': 'pct_' + col + '_gas',
@@ -815,14 +836,19 @@ def prep_plant_fuel_data_eia(raw_eia_df):
             been similarly disaggregated with EIA percent data.
     """
     logger.info(' - Building eia table broken down by plant and fuel type')
+    raw_eia_df['eia_unit_count'] = 'place holder'
     eia_plant_fuel_df = (
-        raw_eia_df.assign(eia_unit_count='place holder')
-        .groupby(input_dict['plant-fuel_index_cols'], as_index=False)
+        raw_eia_df.groupby(input_dict['plant-fuel_index_cols'], as_index=False)
         .agg({'total_fuel_cost': lambda x: x.sum(),
               'net_generation_mwh': lambda x: x.sum(),
               'capacity_mw': lambda x: x.sum(),
               'total_mmbtu': lambda x: x.sum(),
+              'variable_cost': lambda x: x.sum(),
               'eia_unit_count': lambda x: x.count()}))
+    # Turn 0s into Nan values
+    eia_plant_fuel_df['variable_cost'] = (
+        eia_plant_fuel_df['variable_cost']
+        .apply(lambda x: None if x == 0 else x))
     return eia_plant_fuel_df
 
 
@@ -998,13 +1024,7 @@ def disaggregate_ferc1(eia_pct_df, ferc1_plant_df):
         pd.merge(eia_pct_df, ferc1_plant_df, on=input_dict['plant_index_cols'],
                  how='outer'))
     ferc1_pct_df = calc_cap_op_by_fuel_ferc1(ferc1_pct_prep_df)
-    # capex_melt_df = cost_subtable_maker(ferc1_pct_df, 'capex')
     opex_melt_df = cost_subtable_maker(ferc1_pct_df, 'opex_nofuel')
-    # Merge disaggregated capex and opex FERC1 tables
-    # ferc_cap_op_df = (
-    #     pd.merge(capex_melt_df, opex_melt_df,
-    #              on=input_dict['plant-fuel_index_cols'] + ['ferc1_unit_count'],
-    #              how='outer'))
     return opex_melt_df
 
 
@@ -1015,7 +1035,7 @@ def get_nems():
         pd.read_csv(
             path + '/pltf860.csv',
             dtype={'plant_id': 'int32',
-                   'fixed_om_mwh_87': 'float32',
+                   'fixed_om_kw_87': 'float32',
                    'variable_om_mwh_87': 'float32',
                    })
         .rename(columns={
@@ -1041,7 +1061,7 @@ def prep_nems(pudl_out):
     # Grab NEMS costs and group at plant level. Add year column as 2018.
     nems_cost_df = (
         nems_df.groupby(input_dict['merge_cols_nems'])[
-            ['fixed_om_mwh_87', 'variable_om_mwh_87']]
+            ['fixed_om_kw_87', 'variable_om_mwh_87']]
         .sum()  # should this be a weighted average?
         .reset_index()
     )
@@ -1068,22 +1088,18 @@ def add_nems(eia_ferc1_merge_df, pudl_out):
     # Merge with mcoe df and adjust cost for inflation.
     # NEMS fixed (capex) cost in $/kw and variable (opex) cost in $/mwh
     # Adjust to mw and mwh for mcoe calculation.
-    nems_mcoe_merge_df = (
+    nems_merge_df = (
         pd.merge(eia_ferc1_merge_df, nems_cost_df,
-                 on=input_dict['merge_cols_nems'], how='left')
-        .assign(fixed_om_mwh_nems=lambda x: (
-            calc_inflation('nems', 1987, 2018, x.fixed_om_mwh_87)),
-            variable_om_mwh_nems=lambda x: (
-            calc_inflation('nems', 1987, 2018, x.variable_om_mwh_87)),
-            capex_nems=lambda x: (x.fixed_om_mwh_nems * 1000 *
-                                  x.capacity_mw),
-            opex_nofuel_nems=lambda x: (x.variable_om_mwh_nems *
-                                        x.net_generation_mwh))
-        # .drop(['fixed_om_mwh_87', 'variable_om_mwh_87'], axis=1)
+                 on=input_dict['merge_cols_nems'], how='left'))
+    # Transform fixed cost value from $/kw to $/mw
+    nems_merge_df['fixed_om_mw_87'] = (
+        nems_merge_df['fixed_om_kw_87'] / 1000
     )
+    infl_df = calc_inflation('nems', 1987, nems_merge_df, 'fixed_om_mw_87')
+    infl_df = calc_inflation('nems', 1987, infl_df, 'variable_om_mwh_87')
     logger.info('checking nems inside add_nems')
-    check_nems_records(nems_mcoe_merge_df, pudl_out)
-    return nems_mcoe_merge_df
+    check_nems_records(infl_df, pudl_out)
+    return infl_df
 
 
 def merge_ferc1_eia_mcoe_factors(eia_fuel_df, ferc_fuel_df):
@@ -1112,104 +1128,30 @@ def merge_ferc1_eia_mcoe_factors(eia_fuel_df, ferc_fuel_df):
         .assign(
             fuel_cost_mwh_eia923=lambda x: (x.total_fuel_cost /
                                             x.net_generation_mwh),
-            fix_var_om_mwh=lambda x: (x.opex_nofuel / x.net_generation_mwh)))
-    # variable_om_mwh_ferc1=lambda x: (x.opex_nofuel /
-    #                                 x.net_generation_mwh),
-    # fixed_om_mwh_ferc1=lambda x: x.capex / x.net_generation_mwh))
+            fix_var_om_mwh=lambda x: (x.opex_nofuel / x.net_generation_mwh))
+        .rename(columns={'opex_nofuel': 'fix_var_om'}))
     return eia_ferc_merge_df
 
 
-# ACCOUNT FOR INFLATION
-def calc_fixed_var_breakdown(eia_ferc1_merge_df, raw_eia_df):
+def calc_fixed_var_breakdown(eia_ferc1_merge_df):
     """Calculate and create columns for the fixed and variable costs.
 
-    This function uses data from the NEMS EMM report update. The report
-    includes constant values for the variable cost/MWH of certain technology
-    types and capacity. Here, the data are mapped by said technology type and
-    capacity and assigned a multiplier. Note that technology type is also
-    determined by capacity so the multipliers depend on the technology
-    breakdown of a given plant. As a result, the multipliers may not reflect
-    those included in the report.
+    This function uses variable cost data from the NEMS EMM report to calculate
+    fixed cost. The variable cost is added at the generator level in prep_raw_
+    eia().
 
     Args:
         eia_ferc1_merge_df (pandas.DataFrame): A DataFrame with FERC Form 1 and
-            EIA values merged.
-        raw_eia_df (pandas.DataFrame): A DataFrame containing EIA data from the
-            pudl_out.mcoe() function that has been run through the prep_raw_
-            eia() function.
+            EIA values merged. Should contain column for variable cost,
+            calculated in the prep_raw_eia() function.
     Returns:
         pandas.DataFrame: A DataFrame with columns for fixed and variable
             cost where data is available.
     """
-    # Create a dataframe with the NEMS variable cost multiplier aggregated at
-    # the approporate level. To be used in the main() function.
-    level = 'plant-fuel'
-    tech_df = calc_tech_pct(raw_eia_df, level)
-    multiplier_df = (
-        pd.melt(tech_df, (input_dict[level+'_index_cols']
-                          + ['cap_total_mw', 'net_gen_total_mwh',
-                             'nerc_region'])))
-    multiplier_df['var_cost_multiplier'] = (
-        multiplier_df.apply(lambda x: (
-            make_var_cost_multiplier_key(
-                x.cap_total_mw, x.greet_tech, x.fuel_type_code_pudl)),
-                            axis=1)
-        .map(nems_var_cost_multipliers))
-    # Use line below to see if there are other fuel combos to map on to NEMS
-    # methodology: multiplier_df['multipliers'].unique()
-    multiplier_agg_df = (
-        multiplier_df.assign(var_cost_multiplier=(
-            lambda x: x.var_cost_multiplier * x.value))
-        .groupby(input_dict[level+'_index_cols'])[['var_cost_multiplier']]
-        .sum()
-        .reset_index())
-    multiplier_agg_df['var_cost_multiplier'] = (
-        multiplier_agg_df['var_cost_multiplier'].replace({0: np.nan}))
-    multiplier_agg_df = (multiplier_agg_df[input_dict[level+'_index_cols']
-                         + ['var_cost_multiplier']])
-    # Merge with multiplier column (used to calc var fix cost split later)
-    # Calculate inflation values
-    with_fixed_var = (
-        pd.merge(multiplier_agg_df, eia_ferc1_merge_df,
-                 on=input_dict[level+'_index_cols'], how='right')
-        .assign(
-            variable_cost=lambda x: (x.var_cost_multiplier
-                                     * x.net_generation_mwh),
-            fixed_cost=lambda x: ((x.fix_var_om_mwh
-                                   * x.net_generation_mwh)
-                                  - x.variable_cost)))
-    # t = with_fixed_var.loc[with_fixed_var['fixed_cost']<1]
-    # len(t['plant_id_pudl'].unique())
-    # t
-    years = with_fixed_var['report_year'].unique().tolist()
-    with_inflation = pd.DataFrame()
-    for year in years:
-        df = with_fixed_var.loc[with_fixed_var['report_year'] == year]
-        df.assign(
-            variable_cost_infl=lambda x: (
-                calc_inflation('fred', 2017, year, x.variable_cost)),
-            fixed_cost_infl=lambda x: (
-                calc_inflation('fred', 2017, year, x.fixed_cost)))
-        with_inflation = with_inflation.append(df)
-
-    return with_inflation
-
-        #.assign(var=lambda x: calc_inflation('fred', 2017, x.report_year, x.variable_cost)))
-
-        # variable_cost_infl=lambda x: calc_inflation('fred', 2017, x.report_year, x.variable_cost)))
-
-
-
-    # Add columns for fixed and variable cost
-    # with_multiplier['variable_cost'] = (
-    #     with_multiplier.var_cost_multiplier
-    #     * with_multiplier.net_generation_mwh)
-    # with_multiplier['fixed_cost'] = (
-    #     (with_multiplier.fix_var_om_mwh
-    #      * with_multiplier.net_generation_mwh)
-    #     - with_multiplier.variable_cost)
-    # Account for inflation
-    return with_multiplier
+    eia_ferc1_merge_df['fixed_cost'] = (
+        eia_ferc1_merge_df['fix_var_om']
+        - eia_ferc1_merge_df['variable_cost'])
+    return eia_ferc1_merge_df
 
 
 def calc_mcoe(df):
@@ -1221,10 +1163,13 @@ def calc_mcoe(df):
     Returns: pd.Series: A series of calculated mcoe values
     """
     mcoe = float('nan')
-    # if np.isnan(df.opex_nofuel):
-    #    var_cost = df.opex_nofuel_nems
+    fix_var_cost = df.fix_var_om
+    # Use NEMS column if our calculations are Nan.
+    if np.isnan(df.fix_var_om):
+        fix_var_cost = ((df.fixed_om_mw_18_nems * df.capacity_mw)
+                        + (df.variable_om_mwh_18_nems * df.net_generation_mwh))
     if df.net_generation_mwh > 0:
-        mcoe = ((df.total_fuel_cost + df.opex_nofuel) / df.net_generation_mwh)
+        mcoe = ((df.total_fuel_cost + fix_var_cost) / df.net_generation_mwh)
     return mcoe
 
 
@@ -1366,29 +1311,32 @@ def build_part2_output(raw_eia_df, raw_ferc1_df, pudl_out):
     eia_pct_df = compile_fuel_pcts_eia(raw_eia_df)
     ferc1_plant_fuel_df = disaggregate_ferc1(eia_pct_df, ferc1_plant_df)
     # Merge FERC, EIA, and NEMS; calculate mcoe
-    eia_ferc1_merge_df = merge_ferc1_eia_mcoe_factors(eia_plant_fuel_df,
-                                                      ferc1_plant_fuel_df)
-    fixed_var_breakdown_df = calc_fixed_var_breakdown(eia_ferc1_merge_df,
-                                                      raw_eia_df)
-
-    #fixed_var_breakdown_df.loc[fixed_var_breakdown_df['report_year'] == 2018]
+    eia_ferc1_merge_df = (
+        merge_ferc1_eia_mcoe_factors(eia_plant_fuel_df, ferc1_plant_fuel_df))
+    fixed_var_breakdown_df = calc_fixed_var_breakdown(eia_ferc1_merge_df)
     # Add NEMS data for most recent year O&M cost
     with_nems_df = add_nems(fixed_var_breakdown_df, pudl_out)
-with_nems_df.sort_values('fixed_om_mwh_87', ascending=False)
+    # Check NEMS data against our calculations.
+    # fi = with_nems_df.loc[(with_nems_df['fixed_cost'].notna()) & (with_nems_df['fixed_om_mw_18'].notna())]
+    # fi['fixed_NEMS'] = fi['fixed_om_mw_18'] * fi['net_generation_mwh'] / fi['capacity_mw']
+    # fi.plot.scatter(x='fixed_NEMS', y='fixed_cost')
+    # va = with_nems_df.loc[(with_nems_df['variable_cost'].notna()) & (with_nems_df['variable_om_mwh_18'].notna())]
+    # va['variable_NEMS'] = va['variable_om_mwh_18'] * va['net_generation_mwh']
+    # va.plot.scatter(x='variable_NEMS', y='variable_cost')
     logger.info('checking nems inside build_part2_output')
     check_nems_records(with_nems_df, pudl_out)
     # Validate NEMS data_eia
     # validate_nems(with_nems_df)
     # Calculate MCOE value
-    fixed_var_breakdown_df['mcoe'] = (
-        fixed_var_breakdown_df.apply(lambda x: calc_mcoe(x), axis=1))
+    with_nems_df['mcoe'] = (
+        with_nems_df.apply(lambda x: calc_mcoe(x), axis=1))
     # Add significant heat rate identifier (pudl id 125 = Comanche for test)
-    with_sig_hr_df = compare_heatrate(raw_eia_df, fixed_var_breakdown_df)
+    with_sig_hr_df = compare_heatrate(raw_eia_df, with_nems_df)
     logger.info('Finished compiling Part 2 data compilation')
     return with_sig_hr_df
 
 
-def clean_part2_output(part2_df, nems_cols=True):
+def clean_part2_output(part2_df, separate_nems_cols=False):
     """Clean output for Part 2: select columns, choose NEMS column type, round.
 
     Args:
@@ -1405,6 +1353,11 @@ def clean_part2_output(part2_df, nems_cols=True):
     """
     logger.info('Cleaning Part 2 output')
     # Select output columns
+    # Show per mwh values for fixed and variable cost
+    part2_df['fixed_om_mw'] = (
+        part2_df.fixed_cost / part2_df.capacity_mw)
+    part2_df['variable_om_mwh'] = (
+        part2_df.variable_cost / part2_df.net_generation_mwh)
     out_df = (
         part2_df[[
             'plant_id_pudl',
@@ -1412,34 +1365,48 @@ def clean_part2_output(part2_df, nems_cols=True):
             'report_year',
             'fuel_cost_mwh_eia923',
             'fix_var_om_mwh',
-            'variable_cost',
+            'fix_var_om',
             'fixed_cost',
-            # 'variable_om_mwh_nems',
-            # 'fixed_om_mwh_nems',
+            'variable_cost',
+            'fixed_om_mw',
+            'variable_om_mwh',
+            'fixed_om_mw_18_nems',
+            'variable_om_mwh_18_nems',
             'mcoe',
             'eia_unit_count',
             'ferc1_unit_count',
             'sig_hr',
-            'max_min_hr_diff']])
+            'max_min_hr_diff',
+            'capacity_mw',
+            'net_generation_mwh']])
     # Combine NEMS and FERC1 cost columns; create bool column to show NEMS use.
-    if nems_cols is False:
+    if separate_nems_cols is False:
         out_df = (
             out_df.assign(
                 variable_om_mwh=lambda x: (
-                    x.variable_om_mwh_ferc1.fillna(x.variable_om_mwh_nems)),
+                    x.variable_om_mwh.fillna(x.variable_om_mwh_18_nems)),
                 fixed_om_mwh=lambda x: (
-                    x.fixed_om_mwh_ferc1.fillna(x.fixed_om_mwh_nems)),
-                variable_om_is_NEMS=lambda x: (
-                    x.variable_om_mwh_ferc1.isna() &
-                    x.variable_om_mwh_nems.notna()),
-                fixed_om_is_NEMS=lambda x: (
-                    x.fixed_om_mwh_ferc1.isna() & x.fixed_om_mwh_nems.notna()))
-            .drop(['variable_om_mwh_ferc1', 'variable_om_mwh_nems',
-                   'fixed_om_mwh_ferc1', 'fixed_om_mwh_nems'], axis=1))
+                    x.fixed_om_mw.fillna(
+                        x.fixed_om_mw_18_nems
+                        * x.net_generation_mwh
+                        / x.capacity_mw)),
+                fix_var_om_mwh=lambda x: (
+                    x.fix_var_om_mwh.fillna(
+                        x.variable_om_mwh_18_nems
+                        + x.fixed_om_mw_18_nems
+                        * x.net_generation_mwh
+                        / x.capacity_mw)),
+                fix_var_is_NEMS=lambda x: (
+                    x.fix_var_om_mwh.isna() &
+                    x.variable_om_mwh_18_nems.notna() &
+                    x.fixed_om_mw_18_nems.notna()))
+            .drop(['variable_om_mwh_18_nems', 'fixed_om_mw_18_nems'], axis=1))
+    out_df.drop(['net_generation_mwh', 'capacity_mw'], axis=1)
     out_df = out_df.round(2)
     out_df['ferc1_unit_count'] = out_df['ferc1_unit_count'].astype('Int64')
     logger.info('Finished cleaning Part 2 data')
     return out_df
+
 
 # ----------------------------------------------------------
 # --------------------- * P A R T  3 * ---------------------
@@ -1700,21 +1667,23 @@ def calc_public_health_damages(pm_cems_df):
         year_df = pm_cems_df.loc[pm_cems_df['report_year'] == year]
         try:
             damage_yr_df = (
-                year_df
-                .assign(so2_damages=lambda x: (
-                    calc_inflation('fred', 2006, year,
-                                   tons_to_dollars(x.so2_mass_tons, 'sox'))),
+                year_df.assign(
+                        so2_damages=lambda x: (
+                            tons_to_dollars(x.so2_mass_tons, 'sox')),
                         nox_damages=lambda x: (
-                    calc_inflation('fred', 2006, year,
-                                   tons_to_dollars(x.nox_mass_tons, 'nox'))),
+                            tons_to_dollars(x.nox_mass_tons, 'nox')),
                         pm_damages=lambda x: (
-                    calc_inflation('fred', 2006, year,
-                                   tons_to_dollars(x.pm_mass_tons, 'pm2.5'))),
-                        total_damages=lambda x: (x.so2_damages + x.nox_damages
-                                                 + x.pm_damages)))
+                            tons_to_dollars(x.pm_mass_tons, 'pm2.5'))))
+            inf1 = calc_inflation('fred', 2006, damage_yr_df, 'so2_damages')
+            inf2 = calc_inflation('fred', 2006, inf1, 'nox_damages')
+            inf3 = calc_inflation('fred', 2006, inf2, 'pm_damages')
+            damage_yr_df_with_infl = (
+                inf3.assign(
+                    total_damages=lambda x: (x.so2_damages + x.nox_damages
+                                             + x.pm_damages)))
         except IndexError as error:
             print(f'{year} not accounted for in in inflation index: {error}')
-        damages_df = damages_df.append(damage_yr_df)
+        damages_df = damages_df.append(damage_yr_df_with_infl)
     return damages_df
 
 
@@ -1750,7 +1719,7 @@ def calc_value_of_life(emis_df):
     return emis_df
 
 
-def build_part3_output(raw_eia_df, bga_df, cems_df, level):
+def build_part3_output(raw_eia_df, part1_df, bga_df, cems_df, level):
     """Merge EIA, CEMS, and GREET data based on specified agg level.
 
     Args:
@@ -1765,7 +1734,7 @@ def build_part3_output(raw_eia_df, bga_df, cems_df, level):
             Either 'plant-fuel' or 'unit-fuel' are acceptable.
     """
     logger.info('Building Part 3 output')
-    part1_df = build_part1_output(raw_eia_df, level)
+    # part1_df = build_part1_output(raw_eia_df, level)
     eia_cems_df = add_cems_to_eia(part1_df, bga_df, cems_df, raw_eia_df, level)
     greet_df = add_pm_values(raw_eia_df, level)
     eia_cems_greet_df = (
@@ -1808,9 +1777,6 @@ def generate_source_df():
         .rename(columns={'index': 'Columns', 0: 'Source', 1: 'Description'}))
     return source_df
 
-cems_df = get_cems(pudl_settings)
-cems_df
-
 
 def main(pudl_out, cems_df, level, nems_cols, add_sources=False, aesthetic=False):
     """Create and compile tables from all three parts; final output.
@@ -1827,20 +1793,21 @@ def main(pudl_out, cems_df, level, nems_cols, add_sources=False, aesthetic=False
         pandas.DataFrame: A DataFrame with outputs from part 1, 2, & 3 for the
             speciied level of aggregation.
     """
-    os.chdir(os.getcwd()+'/ei-mcoe-map')
-    level = 'plant-fuel'
+    #os.chdir(os.getcwd()+'/ei-mcoe-map')
+    #level = 'plant-fuel'
+    
     # Compile raw files to pass to methods.
     raw_eia_df = prep_raw_eia(pudl_out)
     raw_ferc1_df = pudl_out.plants_steam_ferc1()
     bga_df = date_to_year(pudl_out.bga())
     # Calculate first and third parts.
     p1 = clean_part1_output(build_part1_output(raw_eia_df, level))
-    p3 = clean_part3_output(build_part3_output(raw_eia_df, bga_df, cems_df,
+    p3 = clean_part3_output(build_part3_output(raw_eia_df, p1, bga_df, cems_df,
                                                level))
     # Calculate second part based on specified aggregation level.
     if level == 'plant-fuel':
-        p2 = clean_part2_output(build_part2_output(raw_eia_df, raw_ferc1_df, pudl_out))
-                                #nems_cols=nems_cols)
+        p2 = clean_part2_output(build_part2_output(raw_eia_df, raw_ferc1_df,
+                                                   pudl_out))
     elif level == 'unit-fuel':
         p2 = pd.DataFrame(columns=input_dict[level + '_index_cols'])  # Empty
     else:
@@ -2217,7 +2184,7 @@ def validate_nems(with_nems_df):
 
 
 def check_nems_records(df, pudl_out):
-    cost_col = 'fixed_om_mwh_87'  # 'fixed_om_mwh_nems'
+    cost_col = 'fixed_om_kw_87'  # 'fixed_om_mwh_nems'
     if cost_col not in df.columns:
         logger.info("This df does not have nems")
         return
