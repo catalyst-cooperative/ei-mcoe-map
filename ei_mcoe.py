@@ -21,9 +21,9 @@ logger = logging.getLogger(__name__)
 
 # Below, for TESTING PURPOSES
 
-#pudl_settings = pudl.workspace.setup.get_defaults()
-#pudl_engine = sa.create_engine(pudl_settings["pudl_db"])
-#pudl_out = pudl.output.pudltabl.PudlTabl(pudl_engine, freq='AS',rolling=True)
+# pudl_settings = pudl.workspace.setup.get_defaults()
+# pudl_engine = sa.create_engine(pudl_settings["pudl_db"])
+# pudl_out = pudl.output.pudltabl.PudlTabl(pudl_engine, freq='AS',rolling=True)
 
 
 # ----------------------------------------------------------
@@ -139,13 +139,13 @@ name_clean_dict = {
     'eia_unit_count': 'Number of EIA units under this PUDL Code',
     'ferc1_unit_count': 'Number of FERC Form 1 Entries under this PUDL Code',
     'capacity_mw': 'MW Nameplate Capacity',
-    'weighted_ave_generator_age_years': 'Age',
+    'generator_age_years': 'Age',
     'retirement_date': 'Retirement Date',
     'fuel_type_code_pudl': 'Broad Fuel Classification',
     'energy_source_code_1': 'Technology',
     'total_mmbtu': 'Annual Total Fuel Consumption MMBtu',
     'net_generation_mwh': 'Annual Electricity Net Generation MWh',
-    'weighted_ave_heat_rate_mmbtu_mwh': 'Heat Rate MMBtu/MWh',
+    'heat_rate_mmbtu_mwh': 'Heat Rate MMBtu/MWh',
     'sig_hr': 'Significant Heat Rate Discrepancy?',
     'max_min_hr_diff': 'Difference Between Maximum and Minimum Unit Heat Rates',
     'total_fuel_cost': 'Fuel Cost',
@@ -395,7 +395,7 @@ def weighted_average(df, wa_col_dict, idx_cols):
         result = g[
             '_data_times_weight'].sum() / g['_weight_where_notnull'].sum()
         del df['_data_times_weight'], df['_weight_where_notnull']
-        result = result.to_frame(name='weighted_ave_' + data).reset_index()
+        result = result.to_frame(name=data).reset_index()
         merge_df = pd.merge(merge_df, result, on=idx_cols, how='outer')
     return merge_df
 
@@ -531,7 +531,7 @@ def check_agg_for_diff(raw_eia_df, qual_cols, level):
     logger.info(' - Checking EIA aggregation for plants with different \
                 qualitative data')
     for col in qual_cols:
-        logger.info(f"checking for differences in: {col}")
+        logger.debug(f"checking for differences in: {col}")
         is_unique_df = (
             raw_eia_df.groupby(
                 input_dict[level + '_index_cols'], as_index=False)
@@ -970,39 +970,56 @@ def get_nems():
             dtype={'plant_id': 'int32',
                    'fixed_om_mwh_87': 'float32',
                    'variable_om_mwh_87': 'float32',
+                   'EFD Fuel Codes.1': 'string',  # this is for memory
+                   'EFD Fuel Codes.2': 'string',  # theyre mixed string/int cols
                    })
         .rename(columns={
             'plant_id': 'plant_id_eia',
             'Unit ID': 'generator_id',
             'Name Plate Capacity (shared if multiple owners) (MW)': 'capacity_mw',
+            'Average Capacity Factor': 'capacity_factor',
         })
         .assign(report_year=2018, report_date='2018-01-01')
-        .astype({'report_date': 'datetime64[ns]'})
+        .astype({'report_date': 'datetime64[ns]', 'report_year': 'Int64'})
     )
     return nems_df
 
 
 def prep_nems(pudl_out):
-    """Grab NEMS and groupby plant-fuel."""
-    nems_df = pd.merge(get_nems(), pudl_out.gens_eia860(),
+    """Grab NEMS and groupby plant-fuel.
+
+    Note: There are ~1500 records which have a 0% capacity factor, thus 0 net
+    generation, and thus have a calculated fixed cost per MWh of inf.
+    """
+    nems_df = pd.merge(get_nems(),
+                       pudl_out.gens_eia860().drop(columns=['capacity_mw']),
                        on=['plant_id_eia', 'generator_id', 'report_date'],
                        how='left')
+
     if len(get_nems()) != len(nems_df):
         raise AssertionError('Merge error with NEMS and pudl_out.gens_eia860')
-    logger.info(
-        f"NEMS records: {len(get_nems())} vs NEMS merge {len(nems_df)}")
-    # Grab NEMS costs and group at plant level. Add year column as 2018.
-    nems_cost_df = (
-        nems_df.groupby(input_dict['merge_cols_nems'])[
-            ['fixed_om_mwh_87', 'variable_om_mwh_87']]
-        .sum()  # should this be a weighted average?
-        .reset_index()
+    # Calculate required fields and adjust cost for inflation.
+    nems_df = (
+        nems_df[nems_df.plant_id_pudl.notnull()]
+        .assign(
+            net_generation_mwh_nems=lambda x:
+                x.capacity_factor * 8760 * x.capacity_mw,
+            fixed_om_mwh_nems=lambda x: (calc_inflation(
+                'nems', 2018, (x.fixed_om_mwh_87 * 1000 * x.capacity_mw /
+                               x.net_generation_mwh_nems))),
+            variable_om_mwh_nems=lambda x: (calc_inflation(
+                'nems', 2018, x.variable_om_mwh_87)),
+            fix_var_om_mwh_nems=lambda x: x.variable_om_mwh_nems +
+            x.fixed_om_mwh_nems)
     )
-    # nems_cost_df = weighted_average(
-    #    nems_df,
-    #    {'fixed_om_mwh_87': 'capacity_mw',
-    #     'variable_om_mwh_87': 'capacity_mw'},
-    #    input_dict['merge_cols_nems'])
+
+    nems_cost_df = weighted_average(
+        nems_df,
+        {'fixed_om_mwh_nems': 'net_generation_mwh_nems',
+         'variable_om_mwh_nems': 'net_generation_mwh_nems',
+         'fix_var_om_mwh_nems': 'net_generation_mwh_nems'
+         },
+        input_dict['merge_cols_nems'])
     return nems_cost_df
 
 
@@ -1017,22 +1034,9 @@ def add_nems(eia_ferc1_merge_df, pudl_out):
             missing FERC Form 1 O&M costs.
     """
     logger.info(' - Adding NEMS cost data')
-    nems_cost_df = prep_nems(pudl_out)
-    # Merge with mcoe df and adjust cost for inflation.
-    # NEMS fixed (capex) cost in $/kw and variable (opex) cost in $/mwh
-    # Adjust to mw and mwh for mcoe calculation.
     nems_mcoe_merge_df = (
-        pd.merge(eia_ferc1_merge_df, nems_cost_df,
+        pd.merge(eia_ferc1_merge_df, prep_nems(pudl_out),
                  on=input_dict['merge_cols_nems'], how='left')
-        .assign(fixed_om_mwh_nems=lambda x: (
-            calc_inflation('nems', 2018, x.fixed_om_mwh_87)),
-            variable_om_mwh_nems=lambda x: (
-            calc_inflation('nems', 2018, x.variable_om_mwh_87)),
-            capex_nems=lambda x: (x.fixed_om_mwh_nems * 1000 *
-                                  x.capacity_mw),
-            opex_nofuel_nems=lambda x: (x.variable_om_mwh_nems *
-                                        x.net_generation_mwh))
-        # .drop(['fixed_om_mwh_87', 'variable_om_mwh_87'], axis=1)
     )
     logger.info('checking nems inside add_nems')
     check_nems_records(nems_mcoe_merge_df, pudl_out)
@@ -1081,8 +1085,6 @@ def calc_mcoe(df):
     Returns: pd.Series: A series of calculated mcoe values
     """
     mcoe = float('nan')
-    # if np.isnan(df.opex_nofuel):
-    #    var_cost = df.opex_nofuel_nems
     if df.net_generation_mwh > 0:
         mcoe = ((df.total_fuel_cost + df.opex_nofuel) / df.net_generation_mwh)
     return mcoe
@@ -1116,7 +1118,7 @@ def compare_heatrate(raw_eia_df, merge_df, sd_mean_cols=False):
     unit_groups = (
         unit_level_df.groupby(input_dict['plant-fuel_index_cols']))
     max_min_df = (
-        unit_groups['weighted_ave_heat_rate_mmbtu_mwh']
+        unit_groups['heat_rate_mmbtu_mwh']
         .agg(max_heat_rate=('max'),
              min_heat_rate=('min'))
         .assign(
@@ -1128,14 +1130,14 @@ def compare_heatrate(raw_eia_df, merge_df, sd_mean_cols=False):
     # Remove crazy outliers for mean / std calculation
     unit_level_df_low = (
         unit_level_df.loc[
-            unit_level_df['weighted_ave_heat_rate_mmbtu_mwh'] < 20])
+            unit_level_df['heat_rate_mmbtu_mwh'] < 20])
     # Find average heat rate for fuel type and year and standard dev.
     mean_yr_hr_df = (
         unit_level_df_low
         .groupby(['report_year', 'fuel_type_code_pudl'])
         .agg(
-            mean_hr_mwh=('weighted_ave_heat_rate_mmbtu_mwh', 'mean'),
-            std_hr=('weighted_ave_heat_rate_mmbtu_mwh', 'std'))
+            mean_hr_mwh=('heat_rate_mmbtu_mwh', 'mean'),
+            std_hr=('heat_rate_mmbtu_mwh', 'std'))
         .reset_index())
     # Merge year and fuel type hr average & std with unit_level df
     unit_level_df_mean = (
@@ -1143,7 +1145,7 @@ def compare_heatrate(raw_eia_df, merge_df, sd_mean_cols=False):
                  on=['report_year', 'fuel_type_code_pudl'], how='left')
         .assign(
             hr_dist_from_mean=lambda x: (
-                abs(x.weighted_ave_heat_rate_mmbtu_mwh - x.mean_hr_mwh)),
+                abs(x.heat_rate_mmbtu_mwh - x.mean_hr_mwh)),
             hr_z_score=lambda x: (x.hr_dist_from_mean / x.std_hr),
             sig_hr=lambda x: x.hr_z_score > 1))
     # Account for mean and standard deviation of heat rates for each fuel type.
@@ -1152,10 +1154,10 @@ def compare_heatrate(raw_eia_df, merge_df, sd_mean_cols=False):
     # for fuel in fuel_types:
     #     mean = (
     #         unit_level_df_low.query(f"fuel_type_code_pudl=='{fuel}'")
-    #         ['weighted_ave_heat_rate_mmbtu_mwh'].mean()).round(2)
+    #         ['heat_rate_mmbtu_mwh'].mean()).round(2)
     #     std = (
     #         unit_level_df_low.query(f"fuel_type_code_pudl=='{fuel}'")
-    #         ['weighted_ave_heat_rate_mmbtu_mwh'].std()).round(2)
+    #         ['heat_rate_mmbtu_mwh'].std()).round(2)
     #     mean_dict[fuel] = mean
     #     std_dict[fuel] = std
     # print('excluding heat rates over 34:')
@@ -1164,7 +1166,7 @@ def compare_heatrate(raw_eia_df, merge_df, sd_mean_cols=False):
     # # Create columns for distance from mean and bool for whether over one std
     # unit_level_df['hr_dist_from_mean'] = (
     #     unit_level_df.apply(
-    #         lambda x: abs(x.weighted_ave_heat_rate_mmbtu_mwh -
+    #         lambda x: abs(x.heat_rate_mmbtu_mwh -
     #                       mean_dict[x.fuel_type_code_pudl]), axis=1))
     # unit_level_df['sig_hr'] = (
     #     unit_level_df.apply(
@@ -1229,9 +1231,7 @@ def build_part2_output(raw_eia_df, raw_ferc1_df, pudl_out):
     eia_ferc1_merge_df = merge_ferc1_eia_mcoe_factors(eia_plant_fuel_df,
                                                       ferc1_plant_fuel_df)
     # Add NEMS data for most recent year O&M cost
-    with_nems_df = add_nems(eia_ferc1_merge_df, pudl_out)
-    logger.info('checking nems inside build_part2_output')
-    check_nems_records(with_nems_df, pudl_out)
+    eia_ferc1_merge_df = add_nems(eia_ferc1_merge_df, pudl_out)
     # Validate NEMS data_eia
     # validate_nems(with_nems_df)
 
@@ -1270,8 +1270,9 @@ def clean_part2_output(part2_df, nems_cols=True):
             'fix_var_om_mwh',
             # 'variable_om_mwh_ferc1',
             # 'fixed_om_mwh_ferc1',
-            # 'variable_om_mwh_nems',
-            # 'fixed_om_mwh_nems',
+            'variable_om_mwh_nems',
+            'fixed_om_mwh_nems',
+            'fix_var_om_mwh_nems',
             'mcoe',
             'eia_unit_count',
             'ferc1_unit_count',
@@ -1290,8 +1291,9 @@ def clean_part2_output(part2_df, nems_cols=True):
                     x.variable_om_mwh_nems.notna()),
                 fixed_om_is_NEMS=lambda x: (
                     x.fixed_om_mwh_ferc1.isna() & x.fixed_om_mwh_nems.notna()))
-            .drop(['variable_om_mwh_ferc1', 'variable_om_mwh_nems',
-                   'fixed_om_mwh_ferc1', 'fixed_om_mwh_nems'], axis=1))
+            # .drop(['variable_om_mwh_ferc1', 'variable_om_mwh_nems',
+            #       'fixed_om_mwh_ferc1', 'fixed_om_mwh_nems'], axis=1)
+        )
     out_df = out_df.round(2)
     out_df['ferc1_unit_count'] = out_df['ferc1_unit_count'].astype('Int64')
     logger.info('Finished cleaning Part 2 data')
@@ -1746,10 +1748,10 @@ def plot_heat_rate(pudl_out):
     # df_oil = hr_df.loc[hr_df['fuel_type_code_pudl'] == 'oil']
     # df_waste = hr_df.loc[hr_df['fuel_type_code_pudl'] == 'waste']
 
-    x_coal = df_coal.weighted_ave_heat_rate_mmbtu_mwh
-    x_gas = df_gas.weighted_ave_heat_rate_mmbtu_mwh
-    # x_oil = df_oil.weighted_ave_heat_rate_mmbtu_mwh
-    # x_waste = df_waste.weighted_ave_heat_rate_mmbtu_mwh
+    x_coal = df_coal.heat_rate_mmbtu_mwh
+    x_gas = df_gas.heat_rate_mmbtu_mwh
+    # x_oil = df_oil.heat_rate_mmbtu_mwh
+    # x_waste = df_waste.heat_rate_mmbtu_mwh
 
     coal_ax.hist([x_coal],
                  histtype='bar',
@@ -2026,17 +2028,17 @@ def plot_fuel_pct_check(df):
     plt.show()
 
 
-def plot_mcoe_vs_nems(plant_level_df, log, x_lim, y_lim):
+def plot_mcoe_vs_nems(plant_level_df, x_cols, y_cols, log, x_lim, y_lim):
     fuels = plant_level_df.fuel_type_code_pudl.unique()
     fig, (ax) = plt.subplots(ncols=1, nrows=1, figsize=(8, 8))
     for fuel in fuels:
         df = plant_level_df[plant_level_df.fuel_type_code_pudl == fuel]
 
-        om_pudl = df['variable_om_mwh_ferc1']  # - df['fuel_cost_mwh_eia923']
-        om_nems = df['variable_om_mwh_nems']  # + df['fixed_om_mwh_nems']
+        om_pudl = df[x_cols].sum(axis='columns')
+        om_nems = df[y_cols].sum(axis='columns')
 
         ax.scatter(om_nems, om_pudl,
-                   alpha='0.2', label=f"{fuel}")
+                   alpha='0.4', label=f"{fuel}")
         ax.set_ylim(y_lim)
         ax.set_xlim(x_lim)
         if log:
@@ -2058,7 +2060,7 @@ def validate_nems(with_nems_df):
                 x.variable_om_mwh_nems / x.variable_om_mwh_ferc1)))
     fixed_pct_ave = nems_pct_df['nems_fixed_pct_of_ferc1'].mean()
     var_pct_ave = nems_pct_df['nems_var_pct_of_ferc1'].mean()
-    #print(f'On average, NEMS values are')
+    # print(f'On average, NEMS values are')
     # ADD PLOT
     # nems.loc[nems['nems_fixed_pct_of_ferc1'].notna()]
     # nems.loc[nems['nems_var_pct_of_ferc1'].notna()]
@@ -2083,4 +2085,4 @@ def check_nems_records(df, pudl_out):
     logger.info(f"Ids w/ NEMS data:  {len(with_nems_ids)}")
     logger.info(f"Ids w/o NEMS data: {len(non_nems_ids)}")
     logger.info(f"Missing ids:       {len(missing)}")
-    logger.info(f"Missing ids: {missing}")
+    logger.debug(f"Missing ids: {missing}")
