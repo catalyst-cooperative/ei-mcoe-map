@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 # pudl_settings = pudl.workspace.setup.get_defaults()
 # pudl_engine = sa.create_engine(pudl_settings["pudl_db"])
-# pudl_out = pudl.output.pudltabl.PudlTabl(pudl_engine, freq='AS',rolling=True)
+# pudl_out = pudl.output.pudltabl.PudlTabl(pudl_engine, freq='AS', rolling=True)
 
 # ----------------------------------------------------------
 # -------------------- Constants ---------------------------
@@ -106,8 +106,8 @@ tech_rename_greet = {'Conventional Steam Coal': 'Boiler',
                      'Wood/Wood Waste Biomass': 'Boiler',
                      None: None}
 
-nerc_regions = ['US', 'ASCC', 'FRCC', 'HICC', 'MRO', 'NPCC',
-                'RFC', 'SERC', 'SPP', 'TRE', 'WECC']
+# nerc_regions = ['US', 'ASCC', 'FRCC', 'HICC', 'MRO', 'NPCC',
+#                'RFC', 'SERC', 'SPP', 'TRE', 'WECC']
 
 # PM2.5 values for certain generator types according to GREET
 # UNITS: g/kWh
@@ -168,7 +168,8 @@ name_clean_dict = {
     'net_generation_mwh': 'Annual Electricity Net Generation MWh',
     'heat_rate_mmbtu_mwh': 'Heat Rate MMBtu/MWh',
     'sig_hr': 'Significant Heat Rate Discrepancy?',
-    'max_min_hr_diff': 'Difference Between Maximum and Minimum Unit Heat Rates',
+    'max_min_hr_diff': 'Difference Between Maximum and Minimum Unit Heat'
+    'Rates',
     'total_fuel_cost': 'Fuel Cost',
     'fix_var_om_mwh': 'Total O&M MWh',
     'variable_cost': 'Variable Cost',
@@ -197,7 +198,8 @@ data_source_dict = {
     'PUDL Plant Code': ['PUDL', ''],
     'Plant Name': ['EIA860', 'table 2'],
     'PUDL Unit ID': ['PUDL', 'maps onto EIA plant code'],
-    'Report Year': ['EIA860', 'table X; adapted from report_date for FERC Form 1 compatability'],
+    'Report Year': ['EIA860', 'table X; adapted from report_date for FERC Form'
+                    '1 compatability'],
     'Latitude': ['EIA860', 'table 2'],
     'Longitude': ['EIA860', 'table 2'],
     'State': ['EIA860', 'table 2'],
@@ -205,31 +207,59 @@ data_source_dict = {
     'City': ['EIA860', 'table 2'],
     'EIA Generator ID': ['EIA860', 'table 3.1'],
     'MW Nameplate Capacity': ['EIA860', 'table 3.1; aggregated by level'],
-    'Age': ['EIA860', 'table 3.1; report_date - operating_date; aggregated by weighted average'],
-    'Retirement Date': ['EIA860', 'table 3.1; based on most recent retirement date if all aggregated units have a listed retirement date'],
-    'Technology': ['EIA860', 'table 3.1; Energy Source 1; aggregated by unique value'],
+    'Age': ['EIA860', 'table 3.1; report_date - operating_date; aggregated by'
+            'weighted average'],
+    'Retirement Date': ['EIA860', 'table 3.1; based on most recent retirement'
+                        'date if all aggregated units have a listed retirement'
+                        'date'],
+    'Technology': ['EIA860', 'table 3.1; Energy Source 1; aggregated by unique'
+                   'value'],
     'Broad Fuel Classification': ['EIA860', 'reference table 28'],
     'Annual Total Fuel Consumption MMBtu': ['EIA923', 'aggregated by sum'],
     'Annual Electricity Net Generation MWh': ['EIA923', 'aggregated by sum'],
     'Heat Rate MMBtu/MWh': ['EIA923', 'aggregated by weighted average'],
-    'Significant Heat Rate Discrepancy?': ['', 'True if more than one standard deviation away from the mean of a given fuel type'],
-    'Difference Between Maximum and Minimum Unit Heat Rates': ['', 'calculated by subtracting the minimum unit heat rate from the minimum unit heat rate'],
+    'Significant Heat Rate Discrepancy?': [
+        '', 'True if more than one standard deviation away from the mean of a '
+        'given fuel type'],
+    'Difference Between Maximum and Minimum Unit Heat Rates': [
+        '', 'calculated by subtracting the minimum unit heat rate from the'
+        'minimum unit heat rate'],
     'Fuel Cost': ['EIA923', ''],
-    'Total O&M MWh': ['FERC Form 1', 'FERC costs disaggregated based on EIA fuel percent of net generation. Comes from FERC value opex_nofuel'],
+    'Total O&M MWh': [
+        'FERC Form 1', 'FERC costs disaggregated based on EIA fuel percent of'
+        'net generation. Comes from FERC value opex_nofuel'],
     'Fixed Cost': ['', 'calculated from NEMS EMM variable cost multipliers'],
-    'Variable Cost': ['', 'calculated from NEMS EMM variable cost multipliers'],
-    'Variable Cost (NEMS)': ['NEMS', 'pltf860.txt column no.63; aggregated by sum'],
-    'Fixed Cost (NEMS)': ['NEMS', 'pltf860.txt column no.63; aggregated by sum'],
-    'Variable Cost MWh': ['', 'calculated by dividing variable cost by net generation'],
+    'Variable Cost': [
+        '', 'calculated from NEMS EMM variable cost multipliers'],
+    'Variable Cost (NEMS)': [
+        'NEMS', 'pltf860.txt column no.63; aggregated by sum'],
+    'Fixed Cost (NEMS)': [
+        'NEMS', 'pltf860.txt column no.63; aggregated by sum'],
+    'Variable Cost MWh': [
+        '', 'calculated by dividing variable cost by net generation'],
     'Fixed Cost MW': ['', 'calculated by dividing fixed cost by capacity'],
-    'Total O&M MWh used NEMS': ['NEMS', 'pltf860.txt column no.64; aggregated by sum; True indicates use of NEMS in Fixed O&M column'],
-    'Marginal Cost of Energy': ['', 'Calculated with EIA923 fuel cost, net generation, and FERC Form 1 O&M costs'],
+    'Total O&M MWh used NEMS': [
+        'NEMS', 'pltf860.txt column no.64; aggregated by sum; True indicates'
+        'use of NEMS in Fixed O&M column'],
+    'Marginal Cost of Energy': [
+        '', 'Calculated with EIA923 fuel cost, net generation, and FERC Form 1'
+        'O&M costs'],
     'Annual CO2 Emissions tons': ['CEMS', 'table X; reported in tons/kwh'],
     'Annual NOx Emissions tons': ['CEMS', 'table X; reported in lbs/kwh'],
     'Annual SO2 Emissions tons': ['CEMS', 'table X; reported in tons/kwh'],
-    'Annual PM2.5 Emissions tons': ['GREET', 'Electricity Generation table 2.1; paired PM2.5 g/kWh values with EIA plants/units based on NERC region and generation technology type; converted to tons annually'],
-    'Annual Public Health Damages': ['EPA benMAP', 'calculated damages by summing national values at the 2020 threshold for pm, sox, and nox in 06$/ton; see http://www2.epa.gov/benmap/response-surface-model-rsm-based-benefit-ton-estimates'],
-    'Annual Premature Dealths': ['', 'divide annual damages by EPA statistical value of a life ($7.4 million); see https://www.epa.gov/environmental-economics/mortality-risk-valuation#whatvalue'],
+    'Annual PM2.5 Emissions tons': [
+        'GREET', 'Electricity Generation table 2.1; paired PM2.5 g/kWh values '
+        'with EIA plants/units based on NERC region and generation technology'
+        'type; converted to tons annually'],
+    'Annual Public Health Damages': [
+        'EPA benMAP', 'calculated damages by summing national values at the '
+        '2020 threshold for pm, sox, and nox in 06$/ton; '
+        'see http://www2.epa.gov/benmap/response-surface-model-rsm-based-'
+        'benefit-ton-estimates'],
+    'Annual Premature Dealths': [
+        '', 'divide annual damages by EPA statistical value of a life '
+        '($7.4 million); see https://www.epa.gov/environmental-economics/'
+        'mortality-risk-valuation#whatvalue'],
     'Number of EIA units under this PUDL code': ['', ''],
     'Number of FERC Form 1 entires under this PUDL code': ['', '']
 }
@@ -413,15 +443,17 @@ def add_var_cost_col(raw_eia_all_plants_df):
         raw_eia_all_plants_df['technology_description']
         .map(tech_rename_greet)
         .replace(np.nan, None))
-    raw_eia_all_plants_df['var_cost_multiplier'] = (
+    raw_eia_all_plants_df['variable_om_mwh'] = (
         raw_eia_all_plants_df.apply(
             lambda x: make_var_cost_multiplier_key(
                 x.capacity_mw, x.greet_tech, x.fuel_type_code_pudl), axis=1)
         .map(nems_var_cost_multipliers))
     var_cost_df = (
         raw_eia_all_plants_df.assign(
-            variable_cost=lambda x: (x.var_cost_multiplier
-                                     * x.net_generation_mwh)))
+            variable_cost=lambda x: (x.variable_om_mwh
+                                     * x.net_generation_mwh),
+        )
+    )
     # Account for inflation - calculate nominal price for each year
     var_cost_with_inflation_df = (
         calc_inflation('fred', 2017, var_cost_df, 'variable_cost'))
@@ -443,13 +475,16 @@ def prep_raw_eia(pudl_out):
             generator age and a column for report year.
     """
     logger.info('Prepping raw EIA data')
-    raw_eia = pudl_out.mcoe().astype({'plant_id_eia': 'Int64'})
-    raw_eia = raw_eia[raw_eia.plant_id_pudl.notnull()]
-    year_df = date_to_year(raw_eia)
-    year_age_df = add_generator_age(year_df)
-    year_age_no_retired_plants_df = eliminate_retired_plants(year_age_df)
-    with_var_cost_df = add_var_cost_col(year_age_no_retired_plants_df)
-    return with_var_cost_df
+    raw_eia = pd.merge(pudl_out.gens_eia860(),
+                       pudl_out.mcoe().astype({'plant_id_eia': 'Int64'}),
+                       how='left')
+    raw_eia = (date_to_year(raw_eia.loc[raw_eia.plant_id_pudl.notnull()])
+               .pipe(add_generator_age)
+               .pipe(eliminate_retired_plants)
+               .pipe(add_var_cost_col)
+               )
+    check_pudl_ids(raw_eia, "from prep_raw_eia")
+    return raw_eia
 
 
 def test_segment(df):
@@ -597,21 +632,22 @@ def check_agg_for_diff(raw_eia_df, qual_cols, level):
         level (str): An string indicating the level of desired aggregation.
             Either 'plant-fuel' or 'unit-fuel' are acceptable.
     """
-    logger.info(' - Checking EIA aggregation for plants with different \
-                qualitative data')
+    logger.info(' - Checking EIA aggregation for plants with different '
+                'qualitative data')
     for col in qual_cols:
-        logger.debug(f"checking for differences in: {col}")
+        logger.info(f"checking for differences in: {col}")
         is_unique_df = (
             raw_eia_df.groupby(
                 input_dict[level + '_index_cols'], as_index=False)
-            .agg({col: lambda x: len(x.unique()) > 1}))
+            .agg({col: (lambda x: len(x.unique()) > 1)}))
         pudl_id_deviant_list = (
-            # Error note: this does not work if '==' replaced with 'is'
-            is_unique_df.loc[is_unique_df[col] == True]['plant_id_pudl']
+            is_unique_df.loc[is_unique_df[col]]['plant_id_pudl']
             .drop_duplicates()
             .tolist())
         if pudl_id_deviant_list:
-            print(f'{pudl_id_deviant_list} have internal differences in {col}')
+            logger.info(
+                f' - {pudl_id_deviant_list} have internal differences in {col}'
+            )
 
 
 def calc_agg_retire_date(retire_col, level):
@@ -700,6 +736,7 @@ def build_part1_output(raw_eia_df, level):
                  how='left')
         .drop_duplicates()
         .reset_index())
+    check_pudl_ids(agg_wa_df, "agg_wa_df")
     logger.info('Finished compiling Part 1 ' + level + ' level data')
     return agg_wa_df
 
@@ -899,7 +936,7 @@ def compile_fuel_pcts_eia(raw_eia_df):
     return eia_pct_df
 
 
-def prep_plant_fuel_data_ferc1(raw_ferc1_df):
+def prep_plant_fuel_data_ferc1(pudl_out):
     """Ready FERC Form 1 data for merging with EIA-932 fuel pct breakdown.
 
     The output DataFrame for this function will be ready to merge with the EIA
@@ -911,6 +948,8 @@ def prep_plant_fuel_data_ferc1(raw_ferc1_df):
         pandas.DataFrame: A DataFrame with FERC Form 1 data aggregated by
             plant.
     """
+    raw_ferc1_df = pudl_out.plants_steam_ferc1()
+    check_pudl_ids(raw_ferc1_df, 'raw_ferc1_df')
     logger.info(' - Building FERC table broken down by plant')
     ferc1_plant_df = (
         raw_ferc1_df.assign(ferc1_unit_count='place_holder')
@@ -918,13 +957,19 @@ def prep_plant_fuel_data_ferc1(raw_ferc1_df):
         .agg({'capex_total': lambda x: x.sum(),
               'opex_fuel': lambda x: x.sum(),
               'opex_production_total': lambda x: x.sum(),
-              'ferc1_unit_count': lambda x: x.count()})
+              'ferc1_unit_count': lambda x: x.count(),
+              'net_generation_mwh': lambda x: x.sum(),
+              })
         .assign(opex_nofuel_ferc1=lambda x: (x.opex_production_total -
-                                             x.opex_fuel))
+                                             x.opex_fuel),
+                fix_var_om_mwh=lambda x: (
+                    x.opex_nofuel_ferc1 / x.net_generation_mwh)
+                )
         .rename(
             columns={'capex_total': 'capex_total_ferc1',
                      'opex_fuel': 'opex_fuel_ferc1',
                      'opex_production_total': 'opex_production_total_ferc1'}))
+    check_pudl_ids(ferc1_plant_df, 'ferc1_plant_df')
     return ferc1_plant_df
 
 
@@ -998,7 +1043,8 @@ def cost_subtable_maker(ferc1_pct_df, cost_type):
         pd.melt(cost_df, input_dict['plant_index_cols'] + ['ferc1_unit_count'])
         .rename(columns={'value': cost_type,
                          'variable': 'fuel_type_code_pudl'})
-        .dropna(subset=[cost_type]))
+        # .dropna(subset=[cost_type])
+    )
     return col_to_row_df
 
 
@@ -1025,7 +1071,9 @@ def disaggregate_ferc1(eia_pct_df, ferc1_plant_df):
         pd.merge(eia_pct_df, ferc1_plant_df, on=input_dict['plant_index_cols'],
                  how='outer'))
     ferc1_pct_df = calc_cap_op_by_fuel_ferc1(ferc1_pct_prep_df)
+    check_pudl_ids(ferc1_pct_df, "ferc1_pct_df")
     opex_melt_df = cost_subtable_maker(ferc1_pct_df, 'opex_nofuel')
+    check_pudl_ids(opex_melt_df, "opex_melt_df")
     return opex_melt_df
 
 
@@ -1039,16 +1087,18 @@ def get_nems():
                    'fixed_om_kw_87': 'float32',
                    'variable_om_mwh_87': 'float32',
                    'EFD Fuel Codes.1': 'string',  # this is for memory
-                   'EFD Fuel Codes.2': 'string',  # theyre mixed string/int cols
+                   'EFD Fuel Codes.2': 'string',  # theyr mixed string/int cols
                    })
         .rename(columns={
             'plant_id': 'plant_id_eia',
             'Unit ID': 'generator_id',
-            'Name Plate Capacity (shared if multiple owners) (MW)': 'capacity_mw',
+            'Name Plate Capacity (shared if multiple owners) (MW)':
+                'capacity_mw',
             'Average Capacity Factor': 'capacity_factor',
         })
         .assign(report_year=2018, report_date='2018-01-01')
-        .astype({'report_date': 'datetime64[ns]', 'report_year': 'Int64'})
+        .astype({'report_date': 'datetime64[ns]',
+                 'report_year': pd.Int64Dtype()})
     )
     return nems_df
 
@@ -1074,21 +1124,47 @@ def prep_nems(pudl_out):
         .assign(
             net_generation_mwh_nems=lambda x:
                 x.capacity_factor * 8760 * x.capacity_mw,
-            fixed_om_mwh_18_nems=lambda x: (
-                x.fixed_om_kw_18_nems * 1000 * x.capacity_mw /
-                x.net_generation_mwh_nems),
-            variable_om_mwh_18_nems=lambda x: (x.variable_om_mwh_18_nems),
-            fix_var_om_mwh_18_nems=lambda x: x.variable_om_mwh_18_nems +
-            x.fixed_om_kw_18_nems)
+            fixed_om_18_nems=lambda x:
+                x.fixed_om_kw_18_nems * 1000 * x.capacity_mw,
+            fixed_om_mwh_18_nems=lambda x:
+                x.fixed_om_18_nems / x.net_generation_mwh_nems,
+            variable_om_18_nems=lambda x:
+                x.variable_om_mwh_18_nems * x.net_generation_mwh_nems,
+            # variable_om_mwh_18_nems=lambda x: (x.variable_om_mwh_18_nems),
+            fix_var_om_mwh_18_nems=lambda x:
+                x.variable_om_mwh_18_nems + x.fixed_om_kw_18_nems,
+        )
     )
 
-    nems_cost_df = weighted_average(
+    nems_agg = (nems_df
+                .groupby(by=input_dict['merge_cols_nems'])
+                .agg({'variable_om_18_nems': 'sum',
+                      'fixed_om_18_nems': 'sum',
+                      'capacity_mw': 'sum',
+                      'net_generation_mwh_nems': 'sum',
+                      }))
+    nems_wtav = weighted_average(
         nems_df,
         {'fixed_om_mwh_18_nems': 'net_generation_mwh_nems',
          'variable_om_mwh_18_nems': 'net_generation_mwh_nems',
-         'fix_var_om_mwh_18_nems': 'net_generation_mwh_nems'
+         'fix_var_om_mwh_18_nems': 'net_generation_mwh_nems',
+         # 'fixed_v_total_ratio': 'capacity_mw'
          },
         input_dict['merge_cols_nems'])
+
+    nems_cost_df = (
+        pd.merge(nems_agg, nems_wtav,
+                 on=input_dict['merge_cols_nems'],
+                 how='outer')
+        .assign(fixed_v_total_ratio=lambda x: x.fixed_om_18_nems /
+                (x.fixed_om_18_nems + x.variable_om_18_nems),
+                var_v_total_ratio=lambda x: x.variable_om_18_nems /
+                (x.fixed_om_18_nems + x.variable_om_18_nems),
+                fix_var_om_18_nems=lambda x:
+                    x.fixed_om_18_nems + x.variable_om_18_nems
+                )
+    )
+
     return nems_cost_df
 
 
@@ -1105,7 +1181,8 @@ def add_nems(eia_ferc1_merge_df, pudl_out):
     logger.info(' - Adding NEMS cost data')
     nems_merge_df = (
         pd.merge(eia_ferc1_merge_df, prep_nems(pudl_out),
-                 on=input_dict['merge_cols_nems'], how='left')
+                 on=input_dict['merge_cols_nems'], how='left',
+                 suffixes=("", "_nems"))
     )
     logger.info('checking nems inside add_nems')
     check_nems_records(nems_merge_df, pudl_out)
@@ -1134,11 +1211,13 @@ def merge_ferc1_eia_mcoe_factors(eia_fuel_df, ferc_fuel_df):
     # data_eia() output associated with key 'plant_fuel_ag'
     eia_ferc_merge_df = (
         pd.merge(eia_fuel_df, ferc_fuel_df,
-                 on=input_dict['plant-fuel_index_cols'], how='outer')
+                 on=input_dict['plant-fuel_index_cols'], how='outer',
+                 suffixes=("", "_ferc1"))
         .assign(
             fuel_cost_mwh_eia923=lambda x: (x.total_fuel_cost /
                                             x.net_generation_mwh),
-            fix_var_om_mwh=lambda x: (x.opex_nofuel / x.net_generation_mwh))
+            fix_var_om_mwh=lambda x: x.opex_nofuel / x.net_generation_mwh
+        )
         .rename(columns={'opex_nofuel': 'fix_var_om'}))
     return eia_ferc_merge_df
 
@@ -1175,9 +1254,9 @@ def calc_mcoe(df):
     mcoe = float('nan')
     fix_var_cost = df.fix_var_om
     # Use NEMS column if our calculations are Nan.
-    if np.isnan(df.fix_var_om):
-        fix_var_cost = ((df.fixed_om_mwh_18_nems * df.capacity_mw)
-                        + (df.variable_om_mwh_18_nems * df.net_generation_mwh))
+    # if np.isnan(df.fix_var_om):
+    #    fix_var_cost = ((df.fixed_om_mwh_18_nems * df.capacity_mw)
+    #                    +(df.variable_om_mwh_18_nems * df.net_generation_mwh))
     if df.net_generation_mwh > 0:
         mcoe = ((df.total_fuel_cost + fix_var_cost) / df.net_generation_mwh)
     return mcoe
@@ -1281,12 +1360,14 @@ def compare_heatrate(raw_eia_df, merge_df, sd_mean_cols=False):
                      on=input_dict['plant-fuel_index_cols'], how='left'))
         # Merge with input df (merge_df)
         logger.info('preparing merge: checking df length compatability')
+        check_pudl_ids(merge_df, "merge_df")
+        check_pudl_ids(with_min_max_df, "with_min_max_df")
         if len(merge_df) != len(with_min_max_df):
             print('df passed not the same length as plant-level aggreation df; \
                    check for duplicates')
         final_hr_df = (
             pd.merge(merge_df, with_min_max_df,
-                     on=input_dict['plant-fuel_index_cols']))
+                     on=input_dict['plant-fuel_index_cols'], how='left'))
         # If only one eia unit, change heat rate diff to say "only one unit"
         final_hr_df.loc[
             (final_hr_df['eia_unit_count'] == 1)
@@ -1295,7 +1376,7 @@ def compare_heatrate(raw_eia_df, merge_df, sd_mean_cols=False):
     return final_hr_df
 
 
-def build_part2_output(raw_eia_df, raw_ferc1_df, pudl_out):
+def build_part2_output(raw_eia_df, pudl_out):
     """Compile final data output for Part 2.
 
     A function that compiles the neccesary data for Part 2 and outputs a
@@ -1308,38 +1389,40 @@ def build_part2_output(raw_eia_df, raw_ferc1_df, pudl_out):
         raw_eia_df (pandas.DataFrame): A DataFrame containing EIA data from the
             pudl_out.mcoe() function that has been run through date_to_year()
             and add_generator_age() functions.
-        raw_ferc1_df (pandas.DataFrame): A DataFrame containing FERC Form 1
-            data.
     Returns:
         pandas.DataFrame: A DataFrame with the MCOE variables and calculations.
     """
     logger.info('Building Part 2 output')
     # Prep data for EIA-FERC integration
     eia_plant_fuel_df = prep_plant_fuel_data_eia(raw_eia_df)
-    ferc1_plant_df = prep_plant_fuel_data_ferc1(raw_ferc1_df)
+    ferc1_plant_df = prep_plant_fuel_data_ferc1(pudl_out)
+    check_pudl_ids(ferc1_plant_df, 'ferc1_plant_df')
     # Find EIA fuel breakdown percents and apply them to FERC Form 1 data.
     eia_pct_df = compile_fuel_pcts_eia(raw_eia_df)
     ferc1_plant_fuel_df = disaggregate_ferc1(eia_pct_df, ferc1_plant_df)
+    check_pudl_ids(ferc1_plant_fuel_df, 'ferc1_plant_fuel_df')
     # Merge FERC, EIA, and NEMS; calculate mcoe
     eia_ferc1_merge_df = (
         merge_ferc1_eia_mcoe_factors(eia_plant_fuel_df, ferc1_plant_fuel_df))
+    check_pudl_ids(eia_ferc1_merge_df, 'eia_ferc1_merge_df')
     fixed_var_breakdown_df = calc_fixed_var_breakdown(eia_ferc1_merge_df)
     # Add NEMS data for most recent year O&M cost
     with_nems_df = add_nems(fixed_var_breakdown_df, pudl_out)
+    check_pudl_ids(with_nems_df, 'with_nems_df')
     # Check NEMS data against our calculations.
-    # fi = with_nems_df.loc[(with_nems_df['fixed_cost'].notna()) & (with_nems_df['fixed_om_mw_18'].notna())]
-    # fi['fixed_NEMS'] = fi['fixed_om_mw_18'] * fi['net_generation_mwh'] / fi['capacity_mw']
+    # fi = with_nems_df.loc[(with_nems_df['fixed_cost'].notna())
+    #                       & (with_nems_df['fixed_om_mw_18'].notna())]
+    # fi['fixed_NEMS'] = (fi['fixed_om_mw_18'] * fi['net_generation_mwh']
+    #                     / fi['capacity_mw'])
     # fi.plot.scatter(x='fixed_NEMS', y='fixed_cost')
-    # va = with_nems_df.loc[(with_nems_df['variable_cost'].notna()) & (with_nems_df['variable_om_mwh_18'].notna())]
+    # va = with_nems_df.loc[(with_nems_df['variable_cost'].notna())
+    #                       & (with_nems_df['variable_om_mwh_18'].notna())]
     # va['variable_NEMS'] = va['variable_om_mwh_18'] * va['net_generation_mwh']
     # va.plot.scatter(x='variable_NEMS', y='variable_cost')
     logger.info('checking nems inside build_part2_output')
     check_nems_records(with_nems_df, pudl_out)
     # Validate NEMS data_eia
     # validate_nems(with_nems_df)
-    # Calculate MCOE value
-    with_nems_df['mcoe'] = (
-        with_nems_df.apply(lambda x: calc_mcoe(x), axis=1))
     # Add significant heat rate identifier (pudl id 125 = Comanche for test)
     with_sig_hr_df = compare_heatrate(raw_eia_df, with_nems_df)
     logger.info('Finished compiling Part 2 data compilation')
@@ -1352,11 +1435,11 @@ def clean_part2_output(part2_df, separate_nems_cols=False):
     Args:
         part2_df (pandas.DataFrame): The output from running bulid_part2_
             output().
-        nems_cols (boolean): An indication of whether to include the NEMS cost
-            columns alongside the FERC Form 1 cost columns for fixed and
-            variable cost or keep the NEMS columns as boolean flag columns with
-            True is NEMS is used and merged into a common fixed or variable
-            column.
+        separate_nems_cols (boolean): An indication of whether to include the
+            NEMS cost columns alongside the FERC Form 1 cost columns for fixed
+            and variable cost or keep the NEMS columns as boolean flag columns
+            with True is NEMS is used and merged into a common fixed or
+            variable column.
     Returns:
         pandas.DataFrame: A DataFrame with all of the components of Part 2,
             cleaned and ready for output.
@@ -1364,58 +1447,43 @@ def clean_part2_output(part2_df, separate_nems_cols=False):
     logger.info('Cleaning Part 2 output')
     # Select output columns
     # Show per mwh values for fixed and variable cost
-    part2_df['fixed_om_mw'] = (
-        part2_df.fixed_cost / part2_df.capacity_mw)
-    part2_df['variable_om_mwh'] = (
-        part2_df.variable_cost / part2_df.net_generation_mwh)
-    out_df = (
-        part2_df[[
-            'plant_id_pudl',
-            'fuel_type_code_pudl',
-            'report_year',
-            'fuel_cost_mwh_eia923',
-            'fix_var_om_mwh',
-            'fix_var_om',
-            'fixed_cost',
-            'variable_cost',
-            'fixed_om_mw',
-            'variable_om_mwh',
-            'fixed_om_mwh_18_nems',
-            'variable_om_mwh_18_nems',
-            'mcoe',
-            'eia_unit_count',
-            'ferc1_unit_count',
-            'sig_hr',
-            'max_min_hr_diff',
-            'capacity_mw',
-            'net_generation_mwh']])
+    part2_df = part2_df.assign(
+        fixed_om=lambda x: x.fix_var_om * x.fixed_v_total_ratio,
+        variable_om=lambda x: x.fix_var_om * x.var_v_total_ratio,
+        # should this be ferc net get?
+        fixed_om_mwh=lambda x: x.fixed_om / x.net_generation_mwh,
+        fixed_om_mwh2=lambda x: x.fixed_om / x.net_generation_mwh,
+        # fixed_om_mwh= lambda x: x.fixed_om / x.net_generation_mwh,
+        fixed_om_mw=lambda x: x.fixed_om / x.capacity_mw,
+        variable_om_mwh=lambda x: x.variable_om / x.net_generation_mwh,
+        fix_var_om_mwh_18_nems=lambda x:
+            x.fixed_om_mwh_18_nems + x.variable_om_mwh_18_nems,
+    )
     # Combine NEMS and FERC1 cost columns; create bool column to show NEMS use.
-    if separate_nems_cols is False:
-        out_df = (
-            out_df.assign(
-                variable_om_mwh=lambda x: (
-                    x.variable_om_mwh.fillna(x.variable_om_mwh_18_nems)),
-                fixed_om_mwh=lambda x: (
-                    x.fixed_om_mw.fillna(
-                        x.fixed_om_mwh_18_nems
-                        * x.net_generation_mwh
-                        / x.capacity_mw)),
-                fix_var_om_mwh=lambda x: (
-                    x.fix_var_om_mwh.fillna(
-                        x.variable_om_mwh_18_nems
-                        + x.fixed_om_mwh_18_nems
-                        * x.net_generation_mwh
-                        / x.capacity_mw)),
+    if separate_nems_cols:
+        part2_df = (
+            part2_df.assign(
                 fix_var_is_NEMS=lambda x: (
                     x.fix_var_om_mwh.isna() &
                     x.variable_om_mwh_18_nems.notna() &
-                    x.fixed_om_mwh_18_nems.notna()))
-            .drop(['variable_om_mwh_18_nems', 'fixed_om_mwh_18_nems'], axis=1))
-    out_df.drop(['net_generation_mwh', 'capacity_mw'], axis=1)
-    out_df = out_df.round(2)
-    out_df['ferc1_unit_count'] = out_df['ferc1_unit_count'].astype('Int64')
+                    x.fixed_om_mwh_18_nems.notna()),
+                variable_om_mwh=lambda x: (
+                    x.variable_om_mwh.fillna(x.variable_om_mwh_18_nems)),
+                fixed_om_mwh=lambda x: (
+                    x.fixed_om_mwh.fillna(x.fixed_om_mwh_18_nems)),
+                fix_var_om_mwh=lambda x: (
+                    x.fix_var_om_mwh.fillna(
+                        x.variable_om_mwh_18_nems + x.fixed_om_mwh_18_nems)),
+            )
+        )
+    part2_df['ferc1_unit_count'] = part2_df['ferc1_unit_count'].astype('Int64')
+    # Calculate MCOE value
+    logger.info('Calculate MCOE.')
+    part2_df['mcoe'] = (
+        part2_df.apply(lambda x: calc_mcoe(x), axis=1))
+    # part2_df = part2_df.round(2)
     logger.info('Finished cleaning Part 2 data')
-    return out_df
+    return part2_df
 
 
 # ----------------------------------------------------------
@@ -1598,9 +1666,11 @@ def calc_pm_value(tech_df, level):
         .assign(pm_id=lambda x: x.fuel_type_code_pudl + '_' + x.greet_tech))
     # Must do this part separatly because does not work in assign...
     # Calculate pm2.5 value based on region and technology
+    nerc_regions = list(tech_df.nerc_region.unique())
     pm_df['pm_g_kwh'] = (
         pm_df.apply(lambda x: (
-            cnct_rgn_tech_to_pm_value(x.nerc_region, x.pm_id)), axis=1))
+            cnct_rgn_tech_to_pm_value(x.nerc_region, x.pm_id, nerc_regions)),
+            axis=1))
     # Must do separately becasue its a series...(don't really understand)
     # Go from g/kwh to tons/year
     pm_df = (
@@ -1613,7 +1683,7 @@ def calc_pm_value(tech_df, level):
     return pm_df
 
 
-def cnct_rgn_tech_to_pm_value(nerc, tech):
+def cnct_rgn_tech_to_pm_value(nerc, tech, nerc_regions):
     """Connect NERC region and tech type to PM2.5 value.
 
     This function is for specific use in calc_pm_value(). It finds the right
@@ -1788,7 +1858,8 @@ def generate_source_df():
     return source_df
 
 
-def main(pudl_out, cems_df, level, separate_nems_cols, add_sources=False, aesthetic=False):
+def main(pudl_out, cems_df, level, separate_nems_cols,
+         add_sources=False, aesthetic=False):
     """Create and compile tables from all three parts; final output.
 
     Args:
@@ -1799,25 +1870,30 @@ def main(pudl_out, cems_df, level, separate_nems_cols, add_sources=False, aesthe
             while.
         level (str): A string indicating the level of desired aggregation.
             Either 'plant-fuel' or 'unit-fuel' are acceptable.
+        add_sources (boolean): if True, add the sources as a MultiIndex
+        aesthetic (boolean): if True, convert the columns to be more human
+            readable
     Returns:
         pandas.DataFrame: A DataFrame with outputs from part 1, 2, & 3 for the
             speciied level of aggregation.
     """
-    # os.chdir(os.getcwd()+'/ei-mcoe-map')
+    # os.chdir(os.getcwd() + '/ei-mcoe-map')
     # level = 'plant-fuel'
 
     # Compile raw files to pass to methods.
     raw_eia_df = prep_raw_eia(pudl_out)
-    raw_ferc1_df = pudl_out.plants_steam_ferc1()
+    check_pudl_ids(raw_eia_df, "raw_eia_df")
     bga_df = date_to_year(pudl_out.bga())
     # Calculate first and third parts.
     p1 = clean_part1_output(build_part1_output(raw_eia_df, level))
+    check_pudl_ids(p1, "p1")
     p3 = clean_part3_output(build_part3_output(raw_eia_df, p1, bga_df, cems_df,
                                                level))
+    check_pudl_ids(p3, "p3")
     # Calculate second part based on specified aggregation level.
     if level == 'plant-fuel':
-        p2 = clean_part2_output(build_part2_output(raw_eia_df, raw_ferc1_df,
-                                                   pudl_out), separate_nems_cols)
+        p2 = clean_part2_output(build_part2_output(raw_eia_df, pudl_out),
+                                separate_nems_cols)
     elif level == 'unit-fuel':
         p2 = pd.DataFrame(columns=input_dict[level + '_index_cols'])  # Empty
     else:
@@ -1825,12 +1901,20 @@ def main(pudl_out, cems_df, level, separate_nems_cols, add_sources=False, aesthe
     # Merge data from three parts together.
     p1p3 = (
         pd.merge(p1, p3, on=input_dict[level + '_index_cols'], how='outer'))
+    check_pudl_ids(p1p3, "p1p3")
     full_df = (
-        pd.merge(p1p3, p2, on=input_dict[level + '_index_cols'], how='outer'))
+        # merge but drop a few columns from parts 1 and 3, because they also
+        # show up in part 2
+        pd.merge(p1p3.drop(
+            columns=['total_fuel_cost', 'net_generation_mwh',
+                     'capacity_mw', 'total_mmbtu']),
+                 p2, on=input_dict[level + '_index_cols'], how='outer'))
+    check_pudl_ids(full_df, "full_df")
     # Account for eia/pudl id descrepancies by grouping by pudl id.
     clean_df = (
         full_df.groupby(input_dict[level + '_index_cols'], as_index=False)
         .first())
+    check_pudl_ids(clean_df, "clean_df")
     # Add plant_id_eia column to plant-level data; combine like technology col.
     if level == 'plant-fuel':
         eia_id_df = (
@@ -1842,6 +1926,7 @@ def main(pudl_out, cems_df, level, separate_nems_cols, add_sources=False, aesthe
         clean_df = (
             pd.merge(clean_df, eia_id_df, on=input_dict[level + '_index_cols'],
                      how='outer'))
+    check_pudl_ids(clean_df, "clean_df")
     if aesthetic:
         clean_df = output_aesthetic(clean_df)  # add_sources=add_sources)
     logger.info('Finished compiling all parts!')
@@ -2155,8 +2240,26 @@ def plot_fuel_pct_check(df):
     plt.show()
 
 
-def plot_mcoe_vs_nems(plant_level_df, x_cols, y_cols, log, x_lim, y_lim):
-    fuels = plant_level_df.fuel_type_code_pudl.unique()
+def plot_mcoe_vs_nems(plant_level_df,
+                      x_cols, y_cols, log, x_lim, y_lim,
+                      fuels=None, alt_title=None):
+    """Plot our MCOE compilation vs NEMS columns on a scatter plot.
+
+    Args:
+        plant_level_df (pandas.DataFrame)
+        x_cols (list) : list of columns to plot on the x axis. Columns will be
+            summed.
+        y_cols (list) : list of columns to plot on the y axis. Columns will be
+            summed.
+        log (boolean): if True, boolean
+        x_lim
+        y_lim
+        fuels
+        alt_title
+    """
+    if fuels is None:
+        fuels = plant_level_df.fuel_type_code_pudl.unique()
+    plant_level_df = plant_level_df[plant_level_df.report_year == 2018]
     fig, (ax) = plt.subplots(ncols=1, nrows=1, figsize=(8, 8))
     for fuel in fuels:
         df = plant_level_df[plant_level_df.fuel_type_code_pudl == fuel]
@@ -2171,13 +2274,17 @@ def plot_mcoe_vs_nems(plant_level_df, x_cols, y_cols, log, x_lim, y_lim):
         if log:
             ax.set_yscale('log')
             ax.set_xscale('log')
-        ax.set_title(f"PUDL vs NEMS O&M")
-        ax.set_ylabel('PUDL O&M ($/MWh)')
-        ax.set_xlabel('NEMS O&M ($/MWh)')
+        if alt_title:
+            ax.set_title(alt_title)
+        else:
+            ax.set_title(f"PUDL vs NEMS O&M")
+        ax.set_ylabel(f'columns: {x_cols}')
+        ax.set_xlabel(f'columns: {y_cols}')
         ax.legend()
 
 
 def validate_nems(with_nems_df):
+    """Validate NEMS."""
     nems_df = with_nems_df.loc[with_nems_df['report_year'] == 2018]
     nems_pct_df = (
         nems_df.assign(
@@ -2185,8 +2292,9 @@ def validate_nems(with_nems_df):
                 x.fixed_om_mwh_nems / x.fixed_om_mwh_ferc1),
             nems_var_pct_of_ferc1=lambda x: (
                 x.variable_om_mwh_18_nems / x.variable_om_mwh_ferc1)))
-    fixed_pct_ave = nems_pct_df['nems_fixed_pct_of_ferc1'].mean()
-    var_pct_ave = nems_pct_df['nems_var_pct_of_ferc1'].mean()
+    nems_pct_df = nems_pct_df
+    # fixed_pct_ave = nems_pct_df['nems_fixed_pct_of_ferc1'].mean()
+    # var_pct_ave = nems_pct_df['nems_var_pct_of_ferc1'].mean()
     # print(f'On average, NEMS values are')
     # ADD PLOT
     # nems.loc[nems['nems_fixed_pct_of_ferc1'].notna()]
@@ -2194,7 +2302,8 @@ def validate_nems(with_nems_df):
 
 
 def check_nems_records(df, pudl_out):
-    cost_col = 'fixed_om_kw_87'  # 'fixed_om_mwh_nems'
+    """Check the unique plant_id_pudl's from NEMS."""
+    cost_col = 'fix_var_om_mwh_18_nems'
     if cost_col not in df.columns:
         logger.info("This df does not have nems")
         return
@@ -2213,3 +2322,12 @@ def check_nems_records(df, pudl_out):
     logger.info(f"Ids w/o NEMS data: {len(non_nems_ids)}")
     logger.info(f"Missing ids:       {len(missing)}")
     logger.debug(f"Missing ids: {missing}")
+
+
+def check_pudl_ids(df, where):
+    """Check the pudl plant ids in the outputs.
+
+    This check is meant to visualize how many unique plant_id_pudl's are
+    """
+    ids_df = df.plant_id_pudl.nunique()
+    logger.info(f"PUDL plant id's in {where} {ids_df}.")
