@@ -1,0 +1,27 @@
+name: pudl-rmi
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  # Basic python environment requirements:
+  - pip~=21.0
+  - python>=3.8,<3.10
+
+  # So we can run a notebook server
+  - jupyterlab~=3.0
+  - jupyter-resource-usage~=0.5.0
+
+  - fredapi
+  - pudl
+
+  # Not normal Python packages that come from PyPI
+  - nodejs  # Useful for Jupyter Notebook Server
+
+  - pip:
+    # If you want to be able to make changes to the PUDL repo as well, you can install
+    # it in editable mode with a line like the following. HOWEVER if you do that, you
+    # should also remove or comment out the github based dependency inside setup.py as
+    # it may supersede the editable installation, which would be confusing.
+    # - --editable ../path/to/your/cloned/pudl/repo
+    # Install the local package such that we can do development work:
+    - --editable ./
