@@ -140,7 +140,6 @@ eia_wa_col_dict = {
 
 fuel_types = ['coal', 'gas', 'oil', 'waste']
 
-API_KEY_FRED = os.environ.get('API_KEY_FRED')
 
 NEMS_YEAR = 2020
 
@@ -577,7 +576,7 @@ def make_var_cost_multiplier_key(cap, greet_tech, fuel_type):
 
 def pull_fred_inflation_df():
     """Read FRED inflation data from API."""
-    fred_api = Fred(api_key=API_KEY_FRED)
+    fred_api = Fred(api_key=os.environ.get('API_KEY_FRED'))
     data = fred_api.get_series('CUUR0000SAH2')
     df = pd.DataFrame(data).reset_index()
     df.columns = ['date', 'value']
