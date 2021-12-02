@@ -6,10 +6,12 @@ from pathlib import Path
 import ei_mcoe.ei_mcoe
 
 REPO_DIR = Path(__file__).resolve().parent.parent.parent
+
 INPUTS_DIR = REPO_DIR / 'inputs'
 """
 Directory of input files that are used in generating the MCOE outputs.
 """
+
 OUTPUTS_DIR = REPO_DIR / 'outputs'
 """
 Directory of output files that are generated from the MCOE processes.

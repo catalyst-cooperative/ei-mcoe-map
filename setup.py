@@ -1,4 +1,4 @@
-"""Setup script to make rmi_ferc1_eia directly installable with pip."""
+"""Setup script to allow ei_mcoe to be installed with pip."""
 
 from setuptools import setup, find_packages
 from pathlib import Path
@@ -17,7 +17,7 @@ setup(
     license="MIT",
     version='0.1.0',
     install_requires=[
-        # "catalystcoop.pudl @ git+https://github.com/catalyst-cooperative/pudl.git@dev",
+        "catalystcoop.pudl @ git+https://github.com/catalyst-cooperative/pudl.git@dev",
         "fredapi",
     ],
     python_requires=">=3.8,<3.10",

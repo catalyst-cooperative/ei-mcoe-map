@@ -140,7 +140,7 @@ eia_wa_col_dict = {
 
 fuel_types = ['coal', 'gas', 'oil', 'waste']
 
-FRED_API_KEY = os.environ.get('FRED_API_KEY')
+API_KEY_FRED = os.environ.get('API_KEY_FRED')
 
 NEMS_YEAR = 2020
 
@@ -577,7 +577,7 @@ def make_var_cost_multiplier_key(cap, greet_tech, fuel_type):
 
 def pull_fred_inflation_df():
     """Read FRED inflation data from API."""
-    fred_api = Fred(api_key=FRED_API_KEY)
+    fred_api = Fred(api_key=API_KEY_FRED)
     data = fred_api.get_series('CUUR0000SAH2')
     df = pd.DataFrame(data).reset_index()
     df.columns = ['date', 'value']
@@ -809,6 +809,7 @@ def add_source_cols(df):
     Args:
         df (pandas.DataFrame): A finished dataframe in need of adding a
             multiindex for sources.
+
     Returns:
         pandas.DataFrame: A DataFrame with a multindex that references the
             source of each of the columns. Only column headers that appear in
@@ -909,6 +910,7 @@ def calc_agg_retire_date(retire_col, level):
 
     Args:
         retire_col(pd.Series): The retirement_date column as a series.
+
     Returns:
         datetime.Datetime: The date of the most recent retirement (or None) if
             one or more entities within the aggregation unit are have a
@@ -949,6 +951,7 @@ def build_part1_output(raw_eia_df, level):
             eia() function.
         level (str): An string indicating the level of desired aggregation.
             Either 'plant-fuel' or 'unit-fuel' are acceptable.
+
     Returns:
         pandas.DataFrame: A DataFrame that either reflects the plant level
             or unit level EIA data separated by fuel type.
@@ -1000,6 +1003,7 @@ def clean_part1_output(part1_df, drop_calcs=False):
         part1_df (pandas.DataFrame): The result of running build_part1_output()
         drop_calcs: A boolean to indicate whether you'd like all of the
             calculations or just the index data.
+
     Returns:
         pandas.DataFrame: A DataFrame that either reflects the plant level
             or unit level EIA data separated by fuel type.
@@ -1054,6 +1058,7 @@ def fuel_type_to_col_eia(eia_plant_fuel_df, col):
             'capacity_mw' or 'net_generation_mwh') that will be reoriented
             to suit the calculation of fuel type breakdown of FERC Form 1
             data.
+
     Returns:
         pandas.DataFrame: A DataFrame with the fuel type percent values
             as columns rather than rows.
@@ -1084,6 +1089,7 @@ def calc_fuel_pcts_eia(eia_plant_fuel_df, pct_col1, pct_col2):
             type.
         pct_col2 (str): A single column name to be broken down by fuel
             type.
+
     Returns:
         pandas.DataFrame: A DataFrame containing the percent breakdown by
             fuel type of pct_col1. Merged with that of pct_col2.
@@ -1120,6 +1126,7 @@ def prep_plant_fuel_data_eia(raw_eia_df):
         raw_eia_df (pandas.DataFrame): A DataFrame containing EIA data from the
             pudl_out.mcoe() function that has been run through date_to_year()
             and add_generator_age() functions.
+
     Returns:
         pandas.DataFrame: A DataFrame with EIA data disaggregated
             by plant and fuel ready to merge with FERC Form 1 data once it's
@@ -1158,6 +1165,7 @@ def compile_fuel_pcts_eia(raw_eia_df):
         raw_eia_df (pandas.DataFrame): A DataFrame containing EIA data from the
             pudl_out.mcoe() function that has been run through the prep_raw_
             eia() function.
+
     Returns:
         pandas.DataFrame: A DataFrame with columns for capacity
             and net generation for each fuel type at the plant or unit level.
@@ -1196,6 +1204,7 @@ def prep_plant_fuel_data_ferc1(pudl_out):
 
     Args:
         raw_ferc1_df (pandas.DataFrame): A DataFrame with raw FERC Form 1 Data.
+
     Returns:
         pandas.DataFrame: A DataFrame with FERC Form 1 data aggregated by
             plant.
@@ -1236,6 +1245,7 @@ def calc_cap_op_by_fuel_ferc1(ferc1_pct_prep_df):
     Args:
         ferc1_pct_df (pandas.DataFrame): A DataFrame with raw ferc plant
             values merged with eia percents.
+
     Returns:
         pandas.DataFrame: A DataFrame with FERC Form 1 Data disaggregated
             by plant and fuel type based on EIA percent values.
@@ -1276,6 +1286,7 @@ def cost_subtable_maker(ferc1_pct_df, cost_type):
             disaggregated by plant and fuel type.
         cost_type (str): A string with the name of the cost column to subdivide
             by.
+
     Returns:
         pandas.DataFrame: A DataFrame with disaggregated FERC Form 1 data
             melted so that columns become row values.
@@ -1314,6 +1325,7 @@ def disaggregate_ferc1(eia_pct_df, ferc1_plant_df):
             plant and fuel type.
         ferc1_plant_df (pandas.DataFrame): A DataFrame with FERC Form 1 data
             aggregated by plant.
+
     Returns:
         pandas.DataFrame: A DataFrame with FERC Form 1 data disaggregated
             by the fuel percentage breakdowns depicted in the EIA data.
@@ -1439,6 +1451,7 @@ def add_nems(eia_ferc1_merge_df, pudl_out):
     Args:
         eia_ferc1_merge_df (pandas.DataFrame): A DataFrame containing mcoe
             factors from FERC Form 1 and EIA. Pre-mcoe calculation.
+
     Returns:
         pandas.DataFrame: A DataFrame with NEMS values added to account for
             missing FERC Form 1 O&M costs.
@@ -1467,6 +1480,7 @@ def merge_ferc1_eia_mcoe_factors(eia_fuel_df, ferc_fuel_df):
             down by plant and fuel type.
         ferc_fuel_df (pandas.DataFrame): A DataFrame with FERC Form 1 data
             broken down by plant and fuel type.
+
     Returns:
         pandas.DataFrame: A DataFrame with EIA and FERC Form 1 data broken
             down by plant and fuel type. MCOE values calculated.
@@ -1498,6 +1512,7 @@ def calc_fixed_var_breakdown(eia_ferc1_merge_df):
         eia_ferc1_merge_df (pandas.DataFrame): A DataFrame with FERC Form 1 and
             EIA values merged. Should contain column for variable cost,
             calculated in the prep_raw_eia() function.
+
     Returns:
         pandas.DataFrame: A DataFrame with columns for fixed and variable
             cost where data is available.
@@ -1514,6 +1529,7 @@ def calc_mcoe(df):
     Args:
         df (pandas.DataFrame): The DataFrame for which you'd like to calculate
             an mcoe value.
+
     Returns: pd.Series: A series of calculated mcoe values
     """
     mcoe = float('nan')
@@ -1545,6 +1561,7 @@ def compare_heatrate(raw_eia_df, merge_df, sd_mean_cols=False):
                 prep_raw_eia() function.
         merge_df (pandas.DataFrame): The DataFrame you'd like to merge the
             significant heat rate column with.
+
     Returns:
         pandas.DataFrame: A Dataframe with a boolean column to show whether
             the heat rate of a given unit is significantly different from
@@ -1656,6 +1673,7 @@ def build_part2_output(raw_eia_df, pudl_out):
         raw_eia_df (pandas.DataFrame): A DataFrame containing EIA data from the
             pudl_out.mcoe() function that has been run through date_to_year()
             and add_generator_age() functions.
+
     Returns:
         pandas.DataFrame: A DataFrame with the MCOE variables and calculations.
     """
@@ -1769,6 +1787,7 @@ def clean_part2_output(part2_df, separate_nems_cols=False):
             and variable cost or keep the NEMS columns as boolean flag columns
             with True is NEMS is used and merged into a common fixed or
             variable column.
+
     Returns:
         pandas.DataFrame: A DataFrame with all of the components of Part 2,
             cleaned and ready for output.
@@ -1914,6 +1933,7 @@ def add_cems_to_eia(part1_df, bga_df, cems_df, raw_eia_df, level):
             eia() function.
         level (str): An string indicating the level of desired aggregation.
             Either 'plant-fuel' or 'unit-fuel' are acceptable.
+
     Returns:
         pandas.DataFrame: A DataFrame containing an merge of the part1 output
             and the CEMS emissions data.
@@ -1966,6 +1986,7 @@ def calc_tech_pct(raw_eia_df, level):
             eia() function.
         level (str): An string indicating the level of desired aggregation.
             Either 'plant-fuel' or 'unit-fuel' are acceptable.
+
     Returns:
         pandas.DataFrame: A DataFrame showing the percent breakdown of each
             generation technology type per 'level' (plant or unit broken down
@@ -2618,6 +2639,7 @@ def merge_ferc1_eia_fuel_pcts(pudl_out):
     Args:
         pudl_out (pudl.output.pudltabl.PudlTabl): An object used to create
             the tables used for EIA and FERC analysis.
+
     Returns:
         pandas.DataFrame: A DataFrame with FERC Form 1 and EIA fuel breakdowns
         by plant.
@@ -2656,6 +2678,7 @@ def compare_ferc_eia(pudl_out):
     Args:
         pudl_out (pudl.output.pudltabl.PudlTabl): An object used to create
             the tables used for EIA and FERC analysis.
+
     Returns:
         pandas.DataFrame: A DataFrame with merged FERC Form 1 and EIA data at
             the plant level. For use in graphic comparison.
@@ -2750,6 +2773,7 @@ def plot_eia_v_ferc(pudl_out):
     Args:
         pudl_out (pudl.output.pudltabl.PudlTabl): An object used to create
             the tables used for EIA and FERC analysis.
+
     Returns:
         matplotlib.pyplot: Plots showing the difference between EIA and FERC
             Form 1 values for specified fields.
@@ -2780,6 +2804,7 @@ def plot_fuel_pct_check(df):
     Args:
         df (pandas.DataFrame): A DataFrame with merged FERC Form 1 and EIA fuel
             percents. Product of the merge_ferc1_eia_fuel_pcts() function.
+
     Returns:
         histogram: A histogram depicting the differnce between EIA fuel percent
             breakdown at the plant and fuel level with FERC Form 1 fuel mmbtu

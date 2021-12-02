@@ -1,4 +1,4 @@
-name: pudl-rmi
+name: ei-mcoe
 channels:
   - conda-forge
   - defaults
@@ -10,9 +10,6 @@ dependencies:
   # So we can run a notebook server
   - jupyterlab~=3.0
   - jupyter-resource-usage~=0.5.0
-
-  - fredapi
-  - pudl
 
   # Not normal Python packages that come from PyPI
   - nodejs  # Useful for Jupyter Notebook Server

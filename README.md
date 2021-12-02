@@ -1,7 +1,15 @@
 # ei-mcoe-map
-Compiling data to generate an interactive map of fossil generators and their marginal cost of electricity
+Compile data to generate an interactive map of fossil generators and their marginal cost of electricity
 
-Need to set a `FRED_API_KEY` and `API_KEY_EIA` as environment variables.
+You will need to obtain API keys from FRED and EIA in order to access the inflation data
+and monthly historical fuel costs by state, which are used in the analysis.
+
+* [Request an EIA API key](https://www.eia.gov/opendata/register.php)
+* [Request a FRED API key](https://fredaccount.stlouisfed.org/login/secure/)
+
+Store these API keys in environment variables named `API_KEY_EIA` and `API_KEY_FRED` so
+that the software has access to them. You can also set the environment variables within
+the "Setup" section of the Jupyter notebook.
 
 ## Installation
 To install the software in this repository, clone it to your computer using git. If
@@ -45,13 +53,13 @@ different git based versions).
 After any changes to the environment specification, you'll need to recreate the conda
 environment. The most reliable way to do that is to remove the old environment and
 create it from scratch. If you're in the top level `ei-mcoe-map` directory and have
-the `pudl-ei` environment activated, that process would look like this:
+the `ei-mcoe` environment activated, that process would look like this:
 
 ```sh
 conda deactivate
-conda env remove --name pudl-ei
+conda env remove --name ei-mcoe
 conda env create --file environment.yml
-conda activate pudl-ei
+conda activate ei-mcoe
 ```
 
 In order to use this repository, you will need a recent copy of the PUDL database. You
