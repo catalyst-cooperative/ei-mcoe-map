@@ -2900,16 +2900,20 @@ def plot_hist_annual(plant_df, col, xlabel):
     """Plot annual data by fuel type in histograms."""
     for year in plant_df.report_year.unique():
         for fuel in ['coal', 'gas']:  # plant_df.fuel_type_code_pudl.unique():
-            df = plant_df[(plant_df.fuel_type_code_pudl == fuel)
-                          & (plant_df.report_year == year)
-                          ]
-            plt.hist(df[col],
-                     range=(0, 100),
-                     bins=30,
-                     weights=df.net_generation_mwh,
-                     label=f'{fuel}',
-                     density=True,
-                     alpha=.7)
+            df = plant_df[
+                (plant_df.fuel_type_code_pudl == fuel)
+                & (plant_df.report_year == year)
+                & np.isfinite(plant_df.net_generation_mwh)
+            ]
+            plt.hist(
+                df[col],
+                range=(0, 100),
+                bins=30,
+                weights=df.net_generation_mwh,
+                label=f'{fuel}',
+                density=True,
+                alpha=0.7
+            )
         plt.legend()
         plt.xlabel(xlabel)
         plt.title(f'{col} for {year}')
