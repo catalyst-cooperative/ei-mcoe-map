@@ -1,5 +1,6 @@
 # ei-mcoe-map
-Compile data to generate an interactive map of fossil generators and their marginal cost of electricity
+Compile data to generate an interactive map of fossil generators and their marginal cost
+of electricity
 
 You will need to obtain API keys from FRED and EIA in order to access the inflation data
 and monthly historical fuel costs by state, which are used in the analysis.
@@ -10,6 +11,12 @@ and monthly historical fuel costs by state, which are used in the analysis.
 Store these API keys in environment variables named `API_KEY_EIA` and `API_KEY_FRED` so
 that the software has access to them. You can also set the environment variables within
 the "Setup" section of the Jupyter notebook.
+
+Note: the MCOE output uses EIA NEMS data to estimate the split between fixed and
+variable O&M costs. This data is stored in the `inputs` directory. We've only extracted
+the 2019 NEMS data, so 2019 is currently being used to estimate the 2020 O&M costs.
+Which year the 2019 data is associated with is determined by `NEMS_YEAR` in
+`ei_mcoe.py`.
 
 ## Installation
 To install the software in this repository, clone it to your computer using git. If
